@@ -18,9 +18,14 @@ import {
   Mail, 
   RefreshCw,
   Award,
-  AlertCircle
+  AlertCircle,
+  FileText,
+  Receipt,
+  Printer,
+  Download,
+  Ticket
 } from "lucide-react";
-import { Employee, Service, Booking, SpaMetadata, OperatingHour } from "../types";
+import { Employee, Service, Booking, SpaMetadata, OperatingHour, Bill, BillItem } from "../types";
 
 interface AdminDashboardProps {
   onRefreshApp: () => void;
@@ -42,7 +47,30 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
   } | null>(null);
 
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "employees" | "services" | "settings" | "leads">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "employees" | "services" | "settings" | "leads" | "billing">("overview");
+
+  // Billing & Invoices state
+  const [bills, setBills] = useState<Bill[]>([]);
+  const [showBillForm, setShowBillForm] = useState(false);
+  const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
+  const [billSearch, setBillSearch] = useState("");
+  const [billForm, setBillForm] = useState({
+    customerName: "",
+    customerPhone: "",
+    customerEmail: "",
+    items: [] as BillItem[],
+    therapistId: "",
+    therapistName: "",
+    date: new Date().toISOString().split("T")[0],
+    discount: 0,
+    tax: 0,
+    paymentMethod: "Cash" as "Cash" | "UPI" | "Card" | "Net Banking",
+    status: "Paid" as "Paid" | "Pending"
+  });
+  const [tempSelectedItem, setTempSelectedItem] = useState({
+    serviceId: "",
+    qty: 1
+  });
 
   // Error/Success banner
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -92,6 +120,19 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
   const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
   const [leadNotesText, setLeadNotesText] = useState("");
 
+  // Fetch bills from backend
+  const fetchBills = async () => {
+    try {
+      const res = await fetch("/api/bills");
+      if (res.ok) {
+        const data = await res.json();
+        setBills(data);
+      }
+    } catch (err) {
+      console.error("Failed to load bills", err);
+    }
+  };
+
   // Load database state
   const loadDatabase = async () => {
     setLoading(true);
@@ -103,6 +144,7 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
         if (data.metadata) {
           setSettingsForm(data.metadata);
         }
+        await fetchBills();
       } else {
         showFeedback("error", "Failed to load database records");
       }
@@ -476,6 +518,136 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
     }
   };
 
+  // Add item to bill form
+  const handleAddItemToBill = () => {
+    if (!tempSelectedItem.serviceId) {
+      showFeedback("error", "Please select a service to add");
+      return;
+    }
+    const service = dbState?.services.find((s) => s.id === tempSelectedItem.serviceId);
+    if (!service) return;
+
+    // Check if item already exists, if so increment qty
+    const existingIdx = billForm.items.findIndex((item) => item.serviceId === service.id);
+    if (existingIdx > -1) {
+      const updatedItems = [...billForm.items];
+      updatedItems[existingIdx].qty += Number(tempSelectedItem.qty || 1);
+      setBillForm({ ...billForm, items: updatedItems });
+    } else {
+      const newItem: BillItem = {
+        serviceId: service.id,
+        serviceName: service.name,
+        price: service.price,
+        qty: Number(tempSelectedItem.qty || 1)
+      };
+      setBillForm({ ...billForm, items: [...billForm.items, newItem] });
+    }
+    // reset selection
+    setTempSelectedItem({ serviceId: "", qty: 1 });
+  };
+
+  // Remove item from bill form
+  const handleRemoveItemFromBill = (serviceId: string) => {
+    const updatedItems = billForm.items.filter((item) => item.serviceId !== serviceId);
+    setBillForm({ ...billForm, items: updatedItems });
+  };
+
+  // Calculate invoice subtotal dynamically
+  const calculateBillSubtotal = () => {
+    return billForm.items.reduce((sum, item) => sum + item.price * item.qty, 0);
+  };
+
+  // Submit and create the bill
+  const handleCreateBillSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!billForm.customerName || !billForm.customerPhone) {
+      showFeedback("error", "Customer name and phone number are required");
+      return;
+    }
+    if (billForm.items.length === 0) {
+      showFeedback("error", "At least one service must be added to the invoice");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const subtotal = calculateBillSubtotal();
+      // Match therapist name if therapistId is set
+      let tName = "";
+      if (billForm.therapistId) {
+        const therapist = dbState?.employees.find((e) => e.id === billForm.therapistId);
+        if (therapist) tName = therapist.name;
+      }
+
+      const payload = {
+        customerName: billForm.customerName,
+        customerPhone: billForm.customerPhone,
+        customerEmail: billForm.customerEmail,
+        items: billForm.items,
+        therapistId: billForm.therapistId,
+        therapistName: tName,
+        date: billForm.date,
+        discount: Number(billForm.discount || 0),
+        tax: Number(billForm.tax || 0),
+        paymentMethod: billForm.paymentMethod,
+        status: billForm.status
+      };
+
+      const res = await fetch("/api/bills", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        const createdBill = await res.json();
+        showFeedback("success", "Invoice generated successfully");
+        // Update local state
+        await fetchBills();
+        // Open the generated invoice details for viewing/printing!
+        setSelectedBill(createdBill);
+        // Reset form
+        setBillForm({
+          customerName: "",
+          customerPhone: "",
+          customerEmail: "",
+          items: [],
+          therapistId: "",
+          therapistName: "",
+          date: new Date().toISOString().split("T")[0],
+          discount: 0,
+          tax: 0,
+          paymentMethod: "Cash",
+          status: "Paid"
+        });
+        setShowBillForm(false);
+      } else {
+        const errData = await res.json();
+        showFeedback("error", errData.error || "Failed to generate invoice");
+      }
+    } catch (err) {
+      showFeedback("error", "Network error generating invoice");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Delete invoice
+  const handleDeleteBill = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete/void this invoice?")) return;
+    try {
+      const res = await fetch(`/api/bills/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        showFeedback("success", "Invoice deleted/voided successfully");
+        await fetchBills();
+      } else {
+        showFeedback("error", "Failed to delete invoice");
+      }
+    } catch (err) {
+      showFeedback("error", "Network error deleting invoice");
+    }
+  };
+
   // Calculation statistics
   const totalEmployees = dbState?.employees.length || 0;
   const activeTherapists = dbState?.employees.filter(e => e.status === "Active").length || 0;
@@ -608,7 +780,8 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
           { id: "employees", label: "Employees & Payroll", icon: Users },
           { id: "services", label: "Spa Service Menu", icon: BookOpen },
           { id: "settings", label: "Timing & Address", icon: MapPin },
-          { id: "leads", label: `Leads Inbox (${totalLeads})`, icon: Mail }
+          { id: "leads", label: `Leads Inbox (${totalLeads})`, icon: Mail },
+          { id: "billing", label: "Billing & Invoices", icon: Receipt }
         ].map((tab) => {
           const Icon = tab.icon;
           const isSelected = activeTab === tab.id;
@@ -1692,6 +1865,527 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
                     );
                   })
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: BILLING & INVOICES */}
+          {activeTab === "billing" && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="pb-2 border-b border-slate-100 flex justify-between items-center flex-wrap gap-4">
+                <div>
+                  <h2 className="font-serif text-2xl font-bold text-slate-900">Billing & Invoicing Ledger</h2>
+                  <p className="text-xs text-slate-500 mt-1">Generate client billing receipts, track spa sales revenues, and manage payment records securely.</p>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                    <input 
+                      type="text" 
+                      value={billSearch}
+                      onChange={(e) => setBillSearch(e.target.value)}
+                      placeholder="Search bill ID, guest, phone..." 
+                      className="bg-white border border-slate-200 rounded-full pl-10 pr-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none w-52 sm:w-64 font-semibold"
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowBillForm(true);
+                      setBillForm({
+                        customerName: "",
+                        customerPhone: "",
+                        customerEmail: "",
+                        items: [],
+                        therapistId: "",
+                        therapistName: "",
+                        date: new Date().toISOString().split("T")[0],
+                        discount: 0,
+                        tax: 0,
+                        paymentMethod: "Cash",
+                        status: "Paid"
+                      });
+                    }}
+                    className="bg-gradient-to-r from-indigo-600 to-sky-500 hover:from-indigo-500 hover:to-sky-400 text-white rounded-full px-4 py-2 text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-sm"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Create Bill</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Bill/Invoice Creation Form Modal overlay */}
+              {showBillForm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/65 backdrop-blur-md animate-fade-in">
+                  <div className="bg-white border border-indigo-50 rounded-3xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl relative animate-scale-up p-6 sm:p-8">
+                    {/* Close button */}
+                    <button
+                      onClick={() => setShowBillForm(false)}
+                      className="absolute top-4 right-4 bg-slate-50 hover:bg-indigo-600 hover:text-white p-2 rounded-full text-slate-700 transition-all duration-300 border border-slate-100"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+
+                    <div className="mb-6">
+                      <span className="text-[11px] font-mono tracking-widest text-indigo-600 uppercase font-bold">
+                        Billing Engine
+                      </span>
+                      <h3 className="font-serif text-2xl font-bold text-slate-900 tracking-wide mt-1">
+                        Generate Guest Bill
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-1">Select rendered therapies, assign the attending specialist, apply discounts, and process the invoice.</p>
+                    </div>
+
+                    <form onSubmit={handleCreateBillSubmit} className="space-y-6">
+                      {/* Customer Info Section */}
+                      <div className="bg-slate-50/50 p-4 border border-indigo-50/50 rounded-2xl space-y-4">
+                        <h4 className="text-xs font-mono tracking-widest text-indigo-600 uppercase font-bold mb-2">1. Guest Details</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">Customer Name *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="E.g., Anand Varma"
+                              value={billForm.customerName}
+                              onChange={(e) => setBillForm({ ...billForm, customerName: e.target.value })}
+                              className="w-full bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs font-semibold"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">Customer Phone *</label>
+                            <input
+                              type="tel"
+                              required
+                              placeholder="E.g., 9823456780"
+                              value={billForm.customerPhone}
+                              onChange={(e) => setBillForm({ ...billForm, customerPhone: e.target.value })}
+                              className="w-full bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs font-semibold"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">Customer Email (Optional)</label>
+                            <input
+                              type="email"
+                              placeholder="E.g., guest@email.com"
+                              value={billForm.customerEmail}
+                              onChange={(e) => setBillForm({ ...billForm, customerEmail: e.target.value })}
+                              className="w-full bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs font-semibold"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Add Services Section */}
+                      <div className="bg-slate-50/50 p-4 border border-indigo-50/50 rounded-2xl space-y-4">
+                        <h4 className="text-xs font-mono tracking-widest text-indigo-600 uppercase font-bold mb-2">2. Add Therapies Rendered</h4>
+                        
+                        <div className="flex flex-col sm:flex-row gap-3 items-end">
+                          <div className="flex-1">
+                            <label className="block text-xs font-bold text-slate-700 mb-1">Select Spa Therapy</label>
+                            <select
+                              value={tempSelectedItem.serviceId}
+                              onChange={(e) => setTempSelectedItem({ ...tempSelectedItem, serviceId: e.target.value })}
+                              className="w-full bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs text-slate-800"
+                            >
+                              <option value="">-- Choose Service --</option>
+                              {dbState?.services.map((svc) => (
+                                <option key={svc.id} value={svc.id}>
+                                  {svc.name} (₹{svc.price} - {svc.duration})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="w-full sm:w-24">
+                            <label className="block text-xs font-bold text-slate-700 mb-1">Qty</label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={tempSelectedItem.qty}
+                              onChange={(e) => setTempSelectedItem({ ...tempSelectedItem, qty: Math.max(1, Number(e.target.value)) })}
+                              className="w-full bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs font-semibold"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleAddItemToBill}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-4 py-2 text-xs font-bold h-9 flex items-center justify-center space-x-1 transition-all"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Add Item</span>
+                          </button>
+                        </div>
+
+                        {/* Bill Items Table */}
+                        <div className="overflow-x-auto border border-indigo-50/80 rounded-xl bg-white">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-mono font-bold uppercase">
+                                <th className="p-3">Therapy Name</th>
+                                <th className="p-3 text-right">Price per Unit</th>
+                                <th className="p-3 text-center">Quantity</th>
+                                <th className="p-3 text-right">Total (INR)</th>
+                                <th className="p-3 text-center">Action</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {billForm.items.length === 0 ? (
+                                <tr>
+                                  <td colSpan={5} className="p-8 text-center text-slate-400 italic">No therapies added yet. Use the selector above to build the bill.</td>
+                                </tr>
+                              ) : (
+                                billForm.items.map((item) => (
+                                  <tr key={item.serviceId} className="border-b border-slate-50 hover:bg-slate-50/50">
+                                    <td className="p-3 font-semibold text-slate-800">{item.serviceName}</td>
+                                    <td className="p-3 text-right text-slate-600">₹{item.price}</td>
+                                    <td className="p-3 text-center text-slate-800 font-bold">{item.qty}</td>
+                                    <td className="p-3 text-right font-bold text-indigo-600">₹{item.price * item.qty}</td>
+                                    <td className="p-3 text-center">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveItemFromBill(item.serviceId)}
+                                        className="text-red-500 hover:text-red-700 p-1"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Transaction and Financials Grid */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-indigo-50/20 p-4 border border-indigo-50/50 rounded-2xl">
+                        {/* Transaction Attributes */}
+                        <div className="space-y-4">
+                          <h4 className="text-xs font-mono tracking-widest text-indigo-600 uppercase font-bold">3. Service & Payment details</h4>
+                          
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 mb-1">Attending Specialist</label>
+                              <select
+                                value={billForm.therapistId}
+                                onChange={(e) => setBillForm({ ...billForm, therapistId: e.target.value })}
+                                className="w-full bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs text-slate-800"
+                              >
+                                <option value="">-- Any / None --</option>
+                                {dbState?.employees.map((emp) => (
+                                  <option key={emp.id} value={emp.id}>{emp.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 mb-1">Billing Date</label>
+                              <input
+                                type="date"
+                                value={billForm.date}
+                                onChange={(e) => setBillForm({ ...billForm, date: e.target.value })}
+                                className="w-full bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs font-semibold"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 mb-1">Payment Method</label>
+                              <select
+                                value={billForm.paymentMethod}
+                                onChange={(e) => setBillForm({ ...billForm, paymentMethod: e.target.value as any })}
+                                className="w-full bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs text-slate-800"
+                              >
+                                <option value="Cash">Cash</option>
+                                <option value="UPI">UPI / Digital</option>
+                                <option value="Card">Credit/Debit Card</option>
+                                <option value="Net Banking">Net Banking</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 mb-1">Payment Status</label>
+                              <select
+                                value={billForm.status}
+                                onChange={(e) => setBillForm({ ...billForm, status: e.target.value as any })}
+                                className="w-full bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs text-slate-800"
+                              >
+                                <option value="Paid">Paid (Complete)</option>
+                                <option value="Pending">Unpaid (Pending)</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Invoice Summary Maths */}
+                        <div className="bg-white border border-indigo-100/50 rounded-2xl p-4 flex flex-col justify-between space-y-3">
+                          <h4 className="text-xs font-mono tracking-widest text-indigo-600 uppercase font-bold">4. Financial Summary</h4>
+                          
+                          <div className="space-y-2 text-xs text-slate-600">
+                            <div className="flex justify-between">
+                              <span>Subtotal</span>
+                              <span className="font-bold text-slate-800">₹{calculateBillSubtotal()}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span>Discount (INR)</span>
+                              <input
+                                type="number"
+                                min="0"
+                                value={billForm.discount}
+                                onChange={(e) => setBillForm({ ...billForm, discount: Math.max(0, Number(e.target.value)) })}
+                                className="bg-slate-50 border border-slate-200 rounded px-2 py-0.5 text-right font-semibold text-slate-800 w-24 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span>Tax / GST (INR)</span>
+                              <input
+                                type="number"
+                                min="0"
+                                value={billForm.tax}
+                                onChange={(e) => setBillForm({ ...billForm, tax: Math.max(0, Number(e.target.value)) })}
+                                className="bg-slate-50 border border-slate-200 rounded px-2 py-0.5 text-right font-semibold text-slate-800 w-24 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                            
+                            <div className="border-t border-slate-100 pt-3 flex justify-between items-center">
+                              <span className="font-serif font-bold text-sm text-slate-800">Grand Total</span>
+                              <span className="font-serif font-bold text-lg text-indigo-600">
+                                ₹{Math.max(0, calculateBillSubtotal() - Number(billForm.discount) + Number(billForm.tax))}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-end space-x-4 border-t border-slate-100 pt-5">
+                        <button
+                          type="button"
+                          onClick={() => setShowBillForm(false)}
+                          className="px-5 py-2.5 rounded-full text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={loading}
+                          className="bg-gradient-to-r from-indigo-600 to-sky-500 hover:from-indigo-500 hover:to-sky-400 text-white rounded-full px-6 py-2.5 text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 shadow-md"
+                        >
+                          <Receipt className="w-4 h-4" />
+                          <span>Generate & Save Invoice</span>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+
+              {/* Bills Listing Ledger */}
+              <div className="overflow-hidden border border-indigo-50/70 rounded-3xl bg-white shadow-sm">
+                <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-indigo-50/60 text-slate-500 font-mono font-bold uppercase text-[11px]">
+                      <th className="p-4">Invoice ID</th>
+                      <th className="p-4">Guest Name & Phone</th>
+                      <th className="p-4">Billing Date</th>
+                      <th className="p-4">Items / Services</th>
+                      <th className="p-4 text-right">Grand Total</th>
+                      <th className="p-4 text-center">Status</th>
+                      <th className="p-4 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bills.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-16 text-center text-slate-400 italic bg-white">
+                          <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                          <p className="font-semibold text-slate-600 text-sm">No transaction bills recorded</p>
+                          <p className="text-xs text-slate-400 mt-1">Click "Create Bill" at the top right to generate your first client invoice.</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      bills
+                        .filter((b) => {
+                          const query = billSearch.toLowerCase();
+                          return (
+                            b.id.toLowerCase().includes(query) ||
+                            b.customerName.toLowerCase().includes(query) ||
+                            b.customerPhone.includes(query) ||
+                            (b.customerEmail && b.customerEmail.toLowerCase().includes(query))
+                          );
+                        })
+                        .map((bill) => (
+                          <tr key={bill.id} className="border-b border-indigo-50/40 hover:bg-slate-50/35 transition-colors">
+                            <td className="p-4 font-mono font-bold text-slate-700">{bill.id}</td>
+                            <td className="p-4">
+                              <div className="font-bold text-slate-900">{bill.customerName}</div>
+                              <div className="text-slate-500 text-xs font-medium">{bill.customerPhone}</div>
+                            </td>
+                            <td className="p-4 font-semibold text-slate-700">{bill.date}</td>
+                            <td className="p-4 max-w-xs truncate">
+                              <span className="bg-slate-50 border border-slate-100 px-2 py-1 rounded text-xs font-semibold text-slate-700">
+                                {bill.items.map(item => `${item.serviceName} (x${item.qty})`).join(", ")}
+                              </span>
+                            </td>
+                            <td className="p-4 text-right font-bold text-indigo-600 font-serif">₹{bill.total}</td>
+                            <td className="p-4 text-center">
+                              <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
+                                bill.status === "Paid" 
+                                  ? "bg-green-50 text-green-700 border-green-200" 
+                                  : "bg-amber-50 text-amber-700 border-amber-200"
+                              }`}>
+                                {bill.status}
+                              </span>
+                            </td>
+                            <td className="p-4 text-center">
+                              <div className="flex items-center justify-center gap-2">
+                                <button
+                                  onClick={() => setSelectedBill(bill)}
+                                  className="px-2.5 py-1 text-[11px] font-bold border border-indigo-100 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg transition-all cursor-pointer flex items-center space-x-1 uppercase"
+                                  title="View/Print Printable Spa Receipt Invoice"
+                                >
+                                  <Receipt className="w-3.5 h-3.5" />
+                                  <span>Receipt</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteBill(bill.id)}
+                                  className="p-1.5 border border-slate-100 hover:border-red-100 hover:text-red-600 text-slate-400 rounded-lg transition-all cursor-pointer"
+                                  title="Void Invoice Record"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* PRINTABLE / VIEWABLE INVOICE DETAIL MODAL */}
+          {selectedBill && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/65 backdrop-blur-md animate-fade-in print:bg-white print:p-0">
+              <div className="bg-white border border-indigo-100 rounded-3xl w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl relative animate-scale-up p-8 flex flex-col justify-between print:border-none print:shadow-none print:max-h-full print:overflow-visible">
+                {/* Modal close icon (hidden on print) */}
+                <button
+                  onClick={() => setSelectedBill(null)}
+                  className="absolute top-4 right-4 bg-slate-50 hover:bg-slate-200 p-2 rounded-full text-slate-700 border border-slate-100 transition-colors print:hidden"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+
+                {/* Receipt Wrapper (targeting for print) */}
+                <div id="printable-spa-invoice" className="font-sans text-slate-800 space-y-6">
+                  {/* Spa Header */}
+                  <div className="text-center pb-6 border-b border-dashed border-slate-200 space-y-2">
+                    <div className="flex justify-center items-center space-x-2">
+                      <Ticket className="w-6 h-6 text-indigo-600 print:text-indigo-600" />
+                      <span className="font-serif font-bold text-2xl tracking-widest text-slate-900 uppercase">SOMA</span>
+                    </div>
+                    <p className="text-[10px] font-mono tracking-widest text-indigo-600 uppercase font-bold">Spa & Wellness Centre</p>
+                    <p className="text-[11px] text-slate-500 max-w-xs mx-auto leading-relaxed">
+                      19 GH, Mittal Kachori building, Scheme 54, Vijay nagar, Indore 452010 | +91 89823 71810
+                    </p>
+                  </div>
+
+                  {/* Metadata coordinates */}
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div className="space-y-1">
+                      <p className="font-mono text-[9px] text-slate-400 uppercase tracking-widest">Invoiced Guest</p>
+                      <p className="font-serif font-bold text-slate-900 text-sm leading-tight">{selectedBill.customerName}</p>
+                      <p className="text-slate-600 font-medium">{selectedBill.customerPhone}</p>
+                      {selectedBill.customerEmail && <p className="text-slate-500">{selectedBill.customerEmail}</p>}
+                    </div>
+                    <div className="text-right space-y-1">
+                      <p className="font-mono text-[9px] text-slate-400 uppercase tracking-widest">Receipt Summary</p>
+                      <p className="font-mono font-bold text-slate-800">{selectedBill.id}</p>
+                      <p className="text-slate-600 font-semibold">Date: {selectedBill.date}</p>
+                      <p className="text-slate-500">Method: {selectedBill.paymentMethod}</p>
+                    </div>
+                  </div>
+
+                  {/* Staff attending */}
+                  {selectedBill.therapistName && (
+                    <div className="bg-slate-50 border border-slate-100/50 rounded-xl px-4 py-2 text-xs flex justify-between items-center">
+                      <span className="text-slate-500 font-semibold">Attending Specialist:</span>
+                      <span className="font-serif font-bold text-slate-800">{selectedBill.therapistName}</span>
+                    </div>
+                  )}
+
+                  {/* Services List Table */}
+                  <div className="space-y-2">
+                    <p className="font-mono text-[9px] text-slate-400 uppercase tracking-widest mb-1.5">Therapeutic Treatments Rendered</p>
+                    <div className="border border-slate-100 rounded-xl overflow-hidden bg-slate-50/20 text-xs">
+                      <div className="grid grid-cols-12 gap-2 bg-slate-50 px-4 py-2 font-mono font-bold text-slate-500 border-b border-slate-100 uppercase text-[10px]">
+                        <span className="col-span-6">Treatment</span>
+                        <span className="col-span-2 text-right">Price</span>
+                        <span className="col-span-2 text-center">Qty</span>
+                        <span className="col-span-2 text-right">Total</span>
+                      </div>
+                      <div className="divide-y divide-slate-100 px-4">
+                        {selectedBill.items.map((item, idx) => (
+                          <div key={idx} className="grid grid-cols-12 gap-2 py-3">
+                            <span className="col-span-6 font-semibold text-slate-800">{item.serviceName}</span>
+                            <span className="col-span-2 text-right text-slate-500">₹{item.price}</span>
+                            <span className="col-span-2 text-center text-slate-800 font-bold">{item.qty}</span>
+                            <span className="col-span-2 text-right font-bold text-slate-900">₹{item.price * item.qty}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Billing Maths Ledger */}
+                  <div className="border-t border-slate-100 pt-4 space-y-1.5 text-xs text-slate-600">
+                    <div className="flex justify-between">
+                      <span>Subtotal amount</span>
+                      <span className="font-semibold text-slate-800">₹{selectedBill.subtotal}</span>
+                    </div>
+                    {selectedBill.discount > 0 && (
+                      <div className="flex justify-between text-green-700">
+                        <span>Corporate Discount applied</span>
+                        <span className="font-semibold">- ₹{selectedBill.discount}</span>
+                      </div>
+                    )}
+                    {selectedBill.tax > 0 && (
+                      <div className="flex justify-between">
+                        <span>GST / Service Surcharges</span>
+                        <span className="font-semibold">+ ₹{selectedBill.tax}</span>
+                      </div>
+                    )}
+                    <div className="border-t border-slate-100 pt-3 flex justify-between items-center">
+                      <span className="font-serif font-bold text-sm text-slate-900 uppercase tracking-wider">Net Paid Amount</span>
+                      <span className="font-serif font-bold text-xl text-indigo-600 print:text-indigo-600">₹{selectedBill.total}</span>
+                    </div>
+                  </div>
+
+                  {/* Standard receipt footer */}
+                  <div className="text-center pt-6 border-t border-dashed border-slate-200 space-y-2">
+                    <p className="font-serif italic text-xs text-slate-500">
+                      "Wishing you divine health, holistic balance, and absolute peace."
+                    </p>
+                    <p className="font-serif font-bold text-[10px] tracking-widest text-indigo-600 uppercase">
+                      Namaste, SOMA Spa & Wellness
+                    </p>
+                  </div>
+                </div>
+
+                {/* Print Control buttons (hidden on print) */}
+                <div className="flex items-center justify-end gap-3 mt-8 pt-5 border-t border-slate-100 print:hidden">
+                  <button
+                    onClick={() => setSelectedBill(null)}
+                    className="px-5 py-2.5 rounded-full text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors"
+                  >
+                    Close Window
+                  </button>
+                  <button
+                    onClick={() => window.print()}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full px-5 py-2.5 text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-sm"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Print Receipt</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}

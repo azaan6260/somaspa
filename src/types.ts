@@ -79,3 +79,29 @@ export interface SpaMetadata {
   logoPalette: "sunset-gold" | "cosmic-ocean" | "teal-mint" | "royal-indigo";
   hours: OperatingHour[];
 }
+
+export interface BillItem {
+  serviceId: string;
+  serviceName: string;
+  price: number;
+  qty: number;
+}
+
+export interface Bill {
+  id: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string;
+  items: BillItem[];
+  therapistId?: string;
+  therapistName?: string;
+  date: string;
+  subtotal: number;
+  discount: number;
+  tax: number;
+  total: number;
+  paymentMethod: "Cash" | "UPI" | "Card" | "Net Banking";
+  status: "Paid" | "Pending";
+  createdAt: string;
+}
+

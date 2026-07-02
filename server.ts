@@ -573,7 +573,12 @@ function loadDB() {
   try {
     if (fs.existsSync(DB_FILE)) {
       const raw = fs.readFileSync(DB_FILE, "utf-8");
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (!parsed.bills) {
+        parsed.bills = [];
+        fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2), "utf-8");
+      }
+      return parsed;
     }
   } catch (err) {
     console.error("Failed to read server_db.json, recreating...", err);
@@ -582,7 +587,8 @@ function loadDB() {
     metadata: { ...DEFAULT_METADATA },
     employees: [...DEFAULT_EMPLOYEES],
     services: [...DEFAULT_SERVICES],
-    leads: [...DEFAULT_LEADS]
+    leads: [...DEFAULT_LEADS],
+    bills: []
   };
   saveDB(initial);
   return initial;
@@ -1138,6 +1144,85 @@ app.delete("/api/services/:id", async (req, res) => {
     res.status(500).json({ error: err.message || "Failed to delete service" });
   }
 });
+
+// CRUD - Bills & Invoices
+app.get("/api/bills", async (req, res) => {
+  try {
+    db = loadDB();
+    res.json(db.bills || []);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to load bills" });
+  }
+});
+
+app.post("/api/bills", async (req, res) => {
+  try {
+    const { customerName, customerPhone, customerEmail, items, therapistId, therapistName, date, discount, tax, paymentMethod, status } = req.body;
+    if (!customerName || !customerPhone || !items || items.length === 0) {
+      return res.status(400).json({ error: "Customer details and at least one service item are required" });
+    }
+
+    db = loadDB();
+    let subtotal = 0;
+    const computedItems = items.map((item: any) => {
+      const originalService = db.services.find((s: any) => s.id === item.serviceId || s.name === item.serviceName);
+      const price = originalService ? originalService.price : Number(item.price);
+      const qty = Number(item.qty || 1);
+      subtotal += price * qty;
+      return {
+        serviceId: originalService ? originalService.id : (item.serviceId || `svc-custom-${Date.now()}`),
+        serviceName: originalService ? originalService.name : item.serviceName,
+        price,
+        qty
+      };
+    });
+
+    const disc = Number(discount || 0);
+    const taxVal = Number(tax || 0);
+    const total = subtotal - disc + taxVal;
+
+    const newBill = {
+      id: `INV-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`,
+      customerName,
+      customerPhone,
+      customerEmail: customerEmail || "",
+      items: computedItems,
+      therapistId: therapistId || "",
+      therapistName: therapistName || "",
+      date: date || new Date().toISOString().split("T")[0],
+      subtotal,
+      discount: disc,
+      tax: taxVal,
+      total: Math.max(0, total),
+      paymentMethod: paymentMethod || "Cash",
+      status: status || "Paid",
+      createdAt: new Date().toISOString()
+    };
+
+    if (!db.bills) db.bills = [];
+    db.bills.unshift(newBill);
+    saveDB(db);
+
+    res.status(201).json(newBill);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to create invoice" });
+  }
+});
+
+app.delete("/api/bills/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    db = loadDB();
+    if (db.bills) {
+      db.bills = db.bills.filter((b: any) => b.id !== id);
+      saveDB(db);
+    }
+    res.json({ success: true, id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to delete bill" });
+  }
+});
+
 
 // Gemini dynamic consultation endpoint
 app.post("/api/consultation", async (req, res) => {

@@ -387,7 +387,8 @@ export default function App() {
                 { id: "ayurveda", label: "Traditional Ayurveda" },
                 { id: "massage", label: "Restorative Massages" },
                 { id: "facial", label: "Skin Rejuvenation" },
-                { id: "package", label: "Wellness Ritual Packages" }
+                { id: "package", label: "Wellness Ritual Packages" },
+                { id: "wellness", label: "Holistic Wellness" }
               ].map((pill) => (
                 <button
                   key={pill.id}
