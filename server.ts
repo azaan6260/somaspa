@@ -4,6 +4,7 @@ import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
+import { isSupabaseConfigured, supabase, supabaseDb } from "./server_supabase";
 
 dotenv.config();
 
@@ -287,53 +288,141 @@ let db = loadDB();
 // API ROUTES
 
 // Get entire database state (for admin sync)
-app.get("/api/db", (req, res) => {
-  db = loadDB();
-  res.json(db);
+app.get("/api/db", async (req, res) => {
+  try {
+    if (isSupabaseConfigured) {
+      let metadata = await supabaseDb.getMetadata();
+      let employees = await supabaseDb.getEmployees();
+      let services = await supabaseDb.getServices();
+      let leads = await supabaseDb.getLeads();
+
+      // Auto-seed empty databases
+      if (!metadata) {
+        metadata = await supabaseDb.updateMetadata(DEFAULT_METADATA as any);
+      }
+      if (services.length === 0) {
+        for (const s of DEFAULT_SERVICES) {
+          await supabaseDb.addService(s as any);
+        }
+        services = await supabaseDb.getServices();
+      }
+      if (employees.length === 0) {
+        for (const e of DEFAULT_EMPLOYEES) {
+          await supabaseDb.addEmployee(e as any);
+        }
+        employees = await supabaseDb.getEmployees();
+      }
+      res.json({ metadata, employees, services, leads });
+    } else {
+      db = loadDB();
+      res.json(db);
+    }
+  } catch (err: any) {
+    console.error("Failed to load DB state:", err);
+    db = loadDB();
+    res.json(db);
+  }
 });
 
 // Reset database to default seeds
-app.post("/api/db/reset", (req, res) => {
-  const initial = {
-    metadata: { ...DEFAULT_METADATA },
-    employees: [...DEFAULT_EMPLOYEES],
-    services: [...DEFAULT_SERVICES],
-    leads: [...DEFAULT_LEADS]
-  };
-  db = initial;
-  saveDB(db);
-  res.json({ success: true, db });
+app.post("/api/db/reset", async (req, res) => {
+  try {
+    if (isSupabaseConfigured) {
+      // Clear existing records from Supabase tables
+      await supabase!.from("spa_leads").delete().neq("id", "");
+      await supabase!.from("spa_employees").delete().neq("id", "");
+      await supabase!.from("spa_services").delete().neq("id", "");
+      await supabase!.from("spa_metadata").delete().neq("id", "");
+
+      const metadata = await supabaseDb.updateMetadata(DEFAULT_METADATA as any);
+      for (const s of DEFAULT_SERVICES) {
+        await supabaseDb.addService(s as any);
+      }
+      for (const e of DEFAULT_EMPLOYEES) {
+        await supabaseDb.addEmployee(e as any);
+      }
+      for (const l of DEFAULT_LEADS) {
+        await supabaseDb.addLead(l as any);
+      }
+
+      const services = await supabaseDb.getServices();
+      const employees = await supabaseDb.getEmployees();
+      const leads = await supabaseDb.getLeads();
+
+      res.json({
+        success: true,
+        db: { metadata, employees, services, leads }
+      });
+    } else {
+      const initial = {
+        metadata: { ...DEFAULT_METADATA },
+        employees: [...DEFAULT_EMPLOYEES],
+        services: [...DEFAULT_SERVICES],
+        leads: [...DEFAULT_LEADS]
+      };
+      db = initial;
+      saveDB(db);
+      res.json({ success: true, db });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to reset database" });
+  }
 });
 
 // Update metadata & settings
-app.post("/api/db/metadata", (req, res) => {
+app.post("/api/db/metadata", async (req, res) => {
   try {
     const { title, tagline, description, address, phone, email, logoPalette, hours } = req.body;
-    db.metadata = {
-      title: title || db.metadata.title,
-      tagline: tagline || db.metadata.tagline,
-      description: description || db.metadata.description,
-      address: address || db.metadata.address,
-      phone: phone || db.metadata.phone,
-      email: email || db.metadata.email,
-      logoPalette: logoPalette || db.metadata.logoPalette,
-      hours: hours || db.metadata.hours
-    };
-    saveDB(db);
-    res.json({ success: true, metadata: db.metadata });
+    if (isSupabaseConfigured) {
+      const existing = await supabaseDb.getMetadata() || DEFAULT_METADATA;
+      const updatedMeta = {
+        title: title || existing.title,
+        tagline: tagline || existing.tagline,
+        description: description || existing.description,
+        address: address || existing.address,
+        phone: phone || existing.phone,
+        email: email || existing.email,
+        logoPalette: (logoPalette as any) || existing.logoPalette,
+        hours: hours || existing.hours
+      };
+      const metadata = await supabaseDb.updateMetadata(updatedMeta);
+      res.json({ success: true, metadata });
+    } else {
+      db.metadata = {
+        title: title || db.metadata.title,
+        tagline: tagline || db.metadata.tagline,
+        description: description || db.metadata.description,
+        address: address || db.metadata.address,
+        phone: phone || db.metadata.phone,
+        email: email || db.metadata.email,
+        logoPalette: logoPalette || db.metadata.logoPalette,
+        hours: hours || db.metadata.hours
+      };
+      saveDB(db);
+      res.json({ success: true, metadata: db.metadata });
+    }
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to update metadata" });
   }
 });
 
 // GET Bookings / Leads (compatibility with frontend booking fetch)
-app.get("/api/bookings", (req, res) => {
-  db = loadDB();
-  res.json(db.leads);
+app.get("/api/bookings", async (req, res) => {
+  try {
+    if (isSupabaseConfigured) {
+      const leads = await supabaseDb.getLeads();
+      res.json(leads);
+    } else {
+      db = loadDB();
+      res.json(db.leads);
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to fetch bookings" });
+  }
 });
 
 // POST Bookings / Leads (compatibility with frontend booking)
-app.post("/api/bookings", (req, res) => {
+app.post("/api/bookings", async (req, res) => {
   try {
     const { name, email, phone, service, date, time, therapist, notes } = req.body;
     if (!name || !email || !phone || !service || !date || !time) {
@@ -352,58 +441,76 @@ app.post("/api/bookings", (req, res) => {
       notes: notes || "",
       createdAt: new Date().toISOString()
     };
-    db.leads.unshift(newBooking);
-    saveDB(db);
-    res.status(201).json(newBooking);
+
+    if (isSupabaseConfigured) {
+      const lead = await supabaseDb.addLead(newBooking);
+      res.status(201).json(lead);
+    } else {
+      db.leads.unshift(newBooking);
+      saveDB(db);
+      res.status(201).json(newBooking);
+    }
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to book appointment" });
   }
 });
 
 // CRUD - Leads
-app.put("/api/leads/:id", (req, res) => {
+app.put("/api/leads/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const { status, notes, name, email, phone, service, date, time, therapist } = req.body;
     
-    const idx = db.leads.findIndex((l: any) => l.id === id);
-    if (idx === -1) {
-      return res.status(444).json({ error: "Lead not found" });
+    if (isSupabaseConfigured) {
+      const updated = await supabaseDb.updateLead(id, {
+        status, notes, name, email, phone, service, date, time, therapist
+      });
+      res.json(updated);
+    } else {
+      const idx = db.leads.findIndex((l: any) => l.id === id);
+      if (idx === -1) {
+        return res.status(444).json({ error: "Lead not found" });
+      }
+
+      db.leads[idx] = {
+        ...db.leads[idx],
+        name: name !== undefined ? name : db.leads[idx].name,
+        email: email !== undefined ? email : db.leads[idx].email,
+        phone: phone !== undefined ? phone : db.leads[idx].phone,
+        service: service !== undefined ? service : db.leads[idx].service,
+        date: date !== undefined ? date : db.leads[idx].date,
+        time: time !== undefined ? time : db.leads[idx].time,
+        therapist: therapist !== undefined ? therapist : db.leads[idx].therapist,
+        status: status !== undefined ? status : db.leads[idx].status,
+        notes: notes !== undefined ? notes : db.leads[idx].notes
+      };
+
+      saveDB(db);
+      res.json(db.leads[idx]);
     }
-
-    db.leads[idx] = {
-      ...db.leads[idx],
-      name: name !== undefined ? name : db.leads[idx].name,
-      email: email !== undefined ? email : db.leads[idx].email,
-      phone: phone !== undefined ? phone : db.leads[idx].phone,
-      service: service !== undefined ? service : db.leads[idx].service,
-      date: date !== undefined ? date : db.leads[idx].date,
-      time: time !== undefined ? time : db.leads[idx].time,
-      therapist: therapist !== undefined ? therapist : db.leads[idx].therapist,
-      status: status !== undefined ? status : db.leads[idx].status,
-      notes: notes !== undefined ? notes : db.leads[idx].notes
-    };
-
-    saveDB(db);
-    res.json(db.leads[idx]);
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to update lead" });
   }
 });
 
-app.delete("/api/leads/:id", (req, res) => {
+app.delete("/api/leads/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    db.leads = db.leads.filter((l: any) => l.id !== id);
-    saveDB(db);
-    res.json({ success: true, id });
+    if (isSupabaseConfigured) {
+      await supabaseDb.deleteLead(id);
+      res.json({ success: true, id });
+    } else {
+      db.leads = db.leads.filter((l: any) => l.id !== id);
+      saveDB(db);
+      res.json({ success: true, id });
+    }
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to delete lead" });
   }
 });
 
 // CRUD - Employees
-app.post("/api/employees", (req, res) => {
+app.post("/api/employees", async (req, res) => {
   try {
     const { name, role, specialty, experience, salary, status, avatarUrl, rating } = req.body;
     if (!name || !role) {
@@ -422,108 +529,160 @@ app.post("/api/employees", (req, res) => {
       attendance: {},
       salariesPaid: {}
     };
-    db.employees.push(newEmp);
-    saveDB(db);
-    res.status(201).json(newEmp);
+
+    if (isSupabaseConfigured) {
+      const emp = await supabaseDb.addEmployee(newEmp as any);
+      res.status(201).json(emp);
+    } else {
+      db.employees.push(newEmp);
+      saveDB(db);
+      res.status(201).json(newEmp);
+    }
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to add employee" });
   }
 });
 
-app.put("/api/employees/:id", (req, res) => {
+app.put("/api/employees/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const { name, role, specialty, experience, salary, status, avatarUrl, rating } = req.body;
     
-    const idx = db.employees.findIndex((e: any) => e.id === id);
-    if (idx === -1) {
-      return res.status(404).json({ error: "Employee not found" });
+    if (isSupabaseConfigured) {
+      const emp = await supabaseDb.updateEmployee(id, {
+        name, role, specialty, experience, salary, status, avatarUrl, rating
+      });
+      res.json(emp);
+    } else {
+      const idx = db.employees.findIndex((e: any) => e.id === id);
+      if (idx === -1) {
+        return res.status(404).json({ error: "Employee not found" });
+      }
+
+      db.employees[idx] = {
+        ...db.employees[idx],
+        name: name !== undefined ? name : db.employees[idx].name,
+        role: role !== undefined ? role : db.employees[idx].role,
+        specialty: specialty !== undefined ? specialty : db.employees[idx].specialty,
+        experience: experience !== undefined ? experience : db.employees[idx].experience,
+        salary: salary !== undefined ? Number(salary) : db.employees[idx].salary,
+        status: status !== undefined ? status : db.employees[idx].status,
+        avatarUrl: avatarUrl !== undefined ? avatarUrl : db.employees[idx].avatarUrl,
+        rating: rating !== undefined ? Number(rating) : db.employees[idx].rating
+      };
+
+      saveDB(db);
+      res.json(db.employees[idx]);
     }
-
-    db.employees[idx] = {
-      ...db.employees[idx],
-      name: name !== undefined ? name : db.employees[idx].name,
-      role: role !== undefined ? role : db.employees[idx].role,
-      specialty: specialty !== undefined ? specialty : db.employees[idx].specialty,
-      experience: experience !== undefined ? experience : db.employees[idx].experience,
-      salary: salary !== undefined ? Number(salary) : db.employees[idx].salary,
-      status: status !== undefined ? status : db.employees[idx].status,
-      avatarUrl: avatarUrl !== undefined ? avatarUrl : db.employees[idx].avatarUrl,
-      rating: rating !== undefined ? Number(rating) : db.employees[idx].rating
-    };
-
-    saveDB(db);
-    res.json(db.employees[idx]);
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to update employee" });
   }
 });
 
-app.delete("/api/employees/:id", (req, res) => {
+app.delete("/api/employees/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    db.employees = db.employees.filter((e: any) => e.id !== id);
-    saveDB(db);
-    res.json({ success: true, id });
+    if (isSupabaseConfigured) {
+      await supabaseDb.deleteEmployee(id);
+      res.json({ success: true, id });
+    } else {
+      db.employees = db.employees.filter((e: any) => e.id !== id);
+      saveDB(db);
+      res.json({ success: true, id });
+    }
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to delete employee" });
   }
 });
 
 // Employee Attendance
-app.post("/api/employees/:id/attendance", (req, res) => {
+app.post("/api/employees/:id/attendance", async (req, res) => {
   try {
     const { id } = req.params;
     const { date, status } = req.body; // status: 'Present' | 'Absent' | 'Leave'
     if (!date || !status) {
       return res.status(400).json({ error: "Date and status are required" });
     }
-    const idx = db.employees.findIndex((e: any) => e.id === id);
-    if (idx === -1) {
-      return res.status(404).json({ error: "Employee not found" });
-    }
 
-    if (!db.employees[idx].attendance) {
-      db.employees[idx].attendance = {};
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase!
+        .from("spa_employees")
+        .select("attendance")
+        .eq("id", id)
+        .single();
+      if (error) throw error;
+      const currentAttendance = data.attendance || {};
+      currentAttendance[date] = status;
+
+      const updated = await supabaseDb.updateEmployee(id, { attendance: currentAttendance });
+      res.json({ success: true, employee: updated });
+    } else {
+      const idx = db.employees.findIndex((e: any) => e.id === id);
+      if (idx === -1) {
+        return res.status(404).json({ error: "Employee not found" });
+      }
+
+      if (!db.employees[idx].attendance) {
+        db.employees[idx].attendance = {};
+      }
+      db.employees[idx].attendance[date] = status;
+      saveDB(db);
+      res.json({ success: true, employee: db.employees[idx] });
     }
-    db.employees[idx].attendance[date] = status;
-    saveDB(db);
-    res.json({ success: true, employee: db.employees[idx] });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to log attendance" });
   }
 });
 
 // Employee Salaries Paid
-app.post("/api/employees/:id/salary", (req, res) => {
+app.post("/api/employees/:id/salary", async (req, res) => {
   try {
     const { id } = req.params;
     const { month, amount, status } = req.body; // status: 'Paid' | 'Pending'
     if (!month || amount === undefined || !status) {
       return res.status(400).json({ error: "Month, amount and status are required" });
     }
-    const idx = db.employees.findIndex((e: any) => e.id === id);
-    if (idx === -1) {
-      return res.status(404).json({ error: "Employee not found" });
-    }
 
-    if (!db.employees[idx].salariesPaid) {
-      db.employees[idx].salariesPaid = {};
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase!
+        .from("spa_employees")
+        .select("salaries_paid")
+        .eq("id", id)
+        .single();
+      if (error) throw error;
+      const currentSalaries = data.salaries_paid || {};
+      currentSalaries[month] = {
+        amount: Number(amount),
+        date: new Date().toISOString().split("T")[0],
+        status
+      };
+
+      const updated = await supabaseDb.updateEmployee(id, { salariesPaid: currentSalaries });
+      res.json({ success: true, employee: updated });
+    } else {
+      const idx = db.employees.findIndex((e: any) => e.id === id);
+      if (idx === -1) {
+        return res.status(404).json({ error: "Employee not found" });
+      }
+
+      if (!db.employees[idx].salariesPaid) {
+        db.employees[idx].salariesPaid = {};
+      }
+      db.employees[idx].salariesPaid[month] = {
+        amount: Number(amount),
+        date: new Date().toISOString().split("T")[0],
+        status
+      };
+      saveDB(db);
+      res.json({ success: true, employee: db.employees[idx] });
     }
-    db.employees[idx].salariesPaid[month] = {
-      amount: Number(amount),
-      date: new Date().toISOString().split("T")[0],
-      status
-    };
-    saveDB(db);
-    res.json({ success: true, employee: db.employees[idx] });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to update salary payment" });
   }
 });
 
 // CRUD - Services
-app.post("/api/services", (req, res) => {
+app.post("/api/services", async (req, res) => {
   try {
     const { name, duration, price, category, description, benefits, imageUrl } = req.body;
     if (!name || !price || !category) {
@@ -539,53 +698,70 @@ app.post("/api/services", (req, res) => {
       benefits: benefits || [],
       imageUrl: imageUrl || "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&q=80&w=800"
     };
-    db.services.push(newService);
-    saveDB(db);
-    res.status(201).json(newService);
+
+    if (isSupabaseConfigured) {
+      const svc = await supabaseDb.addService(newService as any);
+      res.status(201).json(svc);
+    } else {
+      db.services.push(newService);
+      saveDB(db);
+      res.status(201).json(newService);
+    }
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to add service" });
   }
 });
 
-app.put("/api/services/:id", (req, res) => {
+app.put("/api/services/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const { name, duration, price, category, description, benefits, imageUrl } = req.body;
     
-    const idx = db.services.findIndex((s: any) => s.id === id);
-    if (idx === -1) {
-      return res.status(404).json({ error: "Service not found" });
+    if (isSupabaseConfigured) {
+      const svc = await supabaseDb.updateService(id, {
+        name, duration, price, category, description, benefits, imageUrl
+      });
+      res.json(svc);
+    } else {
+      const idx = db.services.findIndex((s: any) => s.id === id);
+      if (idx === -1) {
+        return res.status(404).json({ error: "Service not found" });
+      }
+
+      db.services[idx] = {
+        ...db.services[idx],
+        name: name !== undefined ? name : db.services[idx].name,
+        duration: duration !== undefined ? duration : db.services[idx].duration,
+        price: price !== undefined ? Number(price) : db.services[idx].price,
+        category: category !== undefined ? category : db.services[idx].category,
+        description: description !== undefined ? description : db.services[idx].description,
+        benefits: benefits !== undefined ? benefits : db.services[idx].benefits,
+        imageUrl: imageUrl !== undefined ? imageUrl : db.services[idx].imageUrl
+      };
+
+      saveDB(db);
+      res.json(db.services[idx]);
     }
-
-    db.services[idx] = {
-      ...db.services[idx],
-      name: name !== undefined ? name : db.services[idx].name,
-      duration: duration !== undefined ? duration : db.services[idx].duration,
-      price: price !== undefined ? Number(price) : db.services[idx].price,
-      category: category !== undefined ? category : db.services[idx].category,
-      description: description !== undefined ? description : db.services[idx].description,
-      benefits: benefits !== undefined ? benefits : db.services[idx].benefits,
-      imageUrl: imageUrl !== undefined ? imageUrl : db.services[idx].imageUrl
-    };
-
-    saveDB(db);
-    res.json(db.services[idx]);
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to update service" });
   }
 });
 
-app.delete("/api/services/:id", (req, res) => {
+app.delete("/api/services/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    db.services = db.services.filter((s: any) => s.id !== id);
-    saveDB(db);
-    res.json({ success: true, id });
+    if (isSupabaseConfigured) {
+      await supabaseDb.deleteService(id);
+      res.json({ success: true, id });
+    } else {
+      db.services = db.services.filter((s: any) => s.id !== id);
+      saveDB(db);
+      res.json({ success: true, id });
+    }
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to delete service" });
   }
 });
-
 
 // Gemini dynamic consultation endpoint
 app.post("/api/consultation", async (req, res) => {
@@ -595,26 +771,52 @@ app.post("/api/consultation", async (req, res) => {
       return res.status(400).json({ error: "Message is required" });
     }
 
-    // Refresh db instance before query
-    db = loadDB();
+    let liveServicesList = "";
+    let metadataTitle = "";
+    let metadataTagline = "";
+    let metadataAddress = "";
+    let metadataPhone = "";
+    let metadataEmail = "";
 
-    // Map live services dynamically to train Gemini!
-    const liveServicesList = db.services.map((s: any, index: number) => {
-      return `${index + 1}. "${s.name}" (${s.category.toUpperCase()}) - Duration: ${s.duration} - Price: Rs. ${s.price}
+    if (isSupabaseConfigured) {
+      const services = await supabaseDb.getServices();
+      const meta = await supabaseDb.getMetadata() || DEFAULT_METADATA;
+      metadataTitle = meta.title;
+      metadataTagline = meta.tagline;
+      metadataAddress = meta.address;
+      metadataPhone = meta.phone;
+      metadataEmail = meta.email;
+
+      liveServicesList = services.map((s: any, index: number) => {
+        return `${index + 1}. "${s.name}" (${s.category.toUpperCase()}) - Duration: ${s.duration} - Price: Rs. ${s.price}
    Description: ${s.description}
    Benefits: ${s.benefits ? s.benefits.join(", ") : "N/A"}`;
-    }).join("\n\n");
+      }).join("\n\n");
+    } else {
+      db = loadDB();
+      metadataTitle = db.metadata.title;
+      metadataTagline = db.metadata.tagline;
+      metadataAddress = db.metadata.address;
+      metadataPhone = db.metadata.phone;
+      metadataEmail = db.metadata.email;
 
-    const systemInstruction = `You are "Aura", the lead holistic therapist and wellness advisor at ${db.metadata.title} in Indore, India.
+      liveServicesList = db.services.map((s: any, index: number) => {
+        return `${index + 1}. "${s.name}" (${s.category.toUpperCase()}) - Duration: ${s.duration} - Price: Rs. ${s.price}
+   Description: ${s.description}
+   Benefits: ${s.benefits ? s.benefits.join(", ") : "N/A"}`;
+      }).join("\n\n");
+    }
+
+    const systemInstruction = `You are "Aura", the lead holistic therapist and wellness advisor at ${metadataTitle} in Indore, India.
 Your tone is deeply calming, warm, welcoming, and knowledgeable about holistic health, traditional Ayurveda, and modern spa therapies.
 You are helping a customer find the perfect treatments, massage techniques, or spa packages based on their wellness goals, stress levels, body aches, skin concerns, or lifestyle (e.g., long desk hours, high-stress jobs).
 
 The current spa details are:
-Name: ${db.metadata.title}
-Tagline: ${db.metadata.tagline}
-Address: ${db.metadata.address}
-Hotline: ${db.metadata.phone}
-Email: ${db.metadata.email}
+Name: ${metadataTitle}
+Tagline: ${metadataTagline}
+Address: ${metadataAddress}
+Hotline: ${metadataPhone}
+Email: ${metadataEmail}
 
 We offer the following live signature therapies dynamically loaded from our service menu:
 ${liveServicesList}
