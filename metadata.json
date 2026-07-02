@@ -1,0 +1,6 @@
+{
+  "name": "SOMA spa and wellness center",
+  "description": "Premium holistic wellness spa in Indore, featuring therapies, automated booking, and a smart Gemini-powered AI wellness advisor.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
