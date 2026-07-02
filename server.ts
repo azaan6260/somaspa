@@ -1,12 +1,12 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
-import dotenv from "dotenv";
 import { isSupabaseConfigured, supabase, supabaseDb } from "./server_supabase";
-
-dotenv.config();
 
 const app = express();
 const PORT = 3000;
