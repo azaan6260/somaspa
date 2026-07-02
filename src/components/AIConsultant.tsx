@@ -104,14 +104,17 @@ export default function AIConsultant({ onSelectService }: AIConsultantProps) {
   const renderBookingShortcut = (text: string) => {
     const lowercase = text.toLowerCase();
     const matches = [];
-    if (lowercase.includes("abhyanga")) matches.push({ name: "Abhyanga Shanti Ayurvedic Massage", tag: "Abhyanga Shanti" });
-    if (lowercase.includes("soundarya") || lowercase.includes("facial")) matches.push({ name: "Indori Royal Soundarya Facial", tag: "Royal Soundarya Facial" });
-    if (lowercase.includes("hot stone") || lowercase.includes("nirvana")) matches.push({ name: "Nirvana Hot Stone Therapy", tag: "Nirvana Hot Stones" });
-    if (lowercase.includes("marma")) matches.push({ name: "Marma Points Healing Therapy", tag: "Marma Points Therapy" });
-    if (lowercase.includes("deep tissue") || lowercase.includes("mukti")) matches.push({ name: "Deep Tissue Mukti Massage", tag: "Deep Tissue Mukti" });
-    if (lowercase.includes("aroma") || lowercase.includes("fusion")) matches.push({ name: "Aroma Harmony Fusion", tag: "Aroma Harmony Fusion" });
-    if (lowercase.includes("detox") || lowercase.includes("panchakarma")) matches.push({ name: "Panchakarma Express Detox", tag: "Panchakarma Express Detox" });
-    if (lowercase.includes("couple") || lowercase.includes("mewar")) matches.push({ name: "Royal Mewar Couple's Ritual", tag: "Royal Mewar Couple's Ritual" });
+    if (lowercase.includes("abhyanga")) matches.push({ name: "Abhyanga – Full Body Ayurvedic Oil Massage", tag: "Abhyanga" });
+    if (lowercase.includes("shirodhara")) matches.push({ name: "Shirodhara – Warm Herbal Oil Therapy for Relaxation", tag: "Shirodhara" });
+    if (lowercase.includes("swedish")) matches.push({ name: "Swedish Massage", tag: "Swedish Massage" });
+    if (lowercase.includes("deep tissue")) matches.push({ name: "Deep Tissue Massage", tag: "Deep Tissue" });
+    if (lowercase.includes("balinese")) matches.push({ name: "Balinese Massage", tag: "Balinese Massage" });
+    if (lowercase.includes("aroma")) matches.push({ name: "Aromatherapy Massage", tag: "Aromatherapy" });
+    if (lowercase.includes("thai")) matches.push({ name: "Thai Massage", tag: "Thai Massage" });
+    if (lowercase.includes("stone")) matches.push({ name: "Hot Stone Therapy", tag: "Hot Stone Therapy" });
+    if (lowercase.includes("foot") || lowercase.includes("reflexology")) matches.push({ name: "Foot Reflexology", tag: "Foot Reflexology" });
+    if (lowercase.includes("couple")) matches.push({ name: "Couple Spa Package", tag: "Couple Spa" });
+    if (lowercase.includes("soma")) matches.push({ name: "Soma Spa Therapy", tag: "Soma Spa" });
 
     if (matches.length === 0) return null;
 

@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { SpaMetadata, Employee, Service, Booking } from "./src/types";
+import { SpaMetadata, Employee, Service, Booking, Review } from "./src/types";
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
@@ -9,6 +9,9 @@ export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
 export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl!, supabaseAnonKey!)
   : null;
+
+// Constant UUID for single-record spa metadata row to match uuid type constraints
+const METADATA_UUID = "00000000-0000-0000-0000-000000000000";
 
 // Helper to convert DB rows to app types
 const mapMetadataFromDb = (row: any): SpaMetadata | null => {
@@ -27,7 +30,7 @@ const mapMetadataFromDb = (row: any): SpaMetadata | null => {
 
 const mapMetadataToDb = (meta: SpaMetadata) => {
   return {
-    id: "main",
+    id: METADATA_UUID,
     title: meta.title,
     tagline: meta.tagline,
     description: meta.description,
@@ -115,7 +118,7 @@ const mapLeadFromDb = (row: any): Booking => {
 
 const mapLeadToDb = (lead: Booking) => {
   return {
-    id: lead.id,
+    id: lead.id || undefined, // UUID primary key
     name: lead.name,
     email: lead.email,
     phone: lead.phone,
@@ -129,6 +132,30 @@ const mapLeadToDb = (lead: Booking) => {
   };
 };
 
+const mapReviewFromDb = (row: any): Review => {
+  return {
+    id: row.id,
+    name: row.name,
+    location: row.location || "Indore",
+    rating: Number(row.rating) || 5,
+    comment: row.comment || "",
+    date: row.date || new Date().toISOString().split("T")[0],
+    service: row.service || ""
+  };
+};
+
+const mapReviewToDb = (rev: Review) => {
+  return {
+    id: rev.id && rev.id.startsWith("rev-") ? undefined : rev.id, // Auto-generate UUID in DB if client sent temporary id
+    name: rev.name,
+    location: rev.location || "Indore",
+    rating: rev.rating,
+    comment: rev.comment,
+    date: rev.date || new Date().toISOString().split("T")[0],
+    service: rev.service
+  };
+};
+
 // Database operation interfaces
 export const supabaseDb = {
   async getMetadata(): Promise<SpaMetadata | null> {
@@ -136,7 +163,7 @@ export const supabaseDb = {
     const { data, error } = await supabase
       .from("spa_metadata")
       .select("*")
-      .eq("id", "main")
+      .eq("id", METADATA_UUID)
       .maybeSingle();
     
     if (error) {
@@ -165,7 +192,7 @@ export const supabaseDb = {
   async getEmployees(): Promise<Employee[]> {
     if (!supabase) return [];
     const { data, error } = await supabase
-      .from("spa_employees")
+      .from("employees")
       .select("*")
       .order("created_at", { ascending: true });
 
@@ -180,7 +207,7 @@ export const supabaseDb = {
     if (!supabase) throw new Error("Supabase is not configured");
     const dbPayload = mapEmployeeToDb(emp);
     const { data, error } = await supabase
-      .from("spa_employees")
+      .from("employees")
       .insert(dbPayload)
       .select("*")
       .single();
@@ -197,7 +224,7 @@ export const supabaseDb = {
     
     // Fetch original first to preserve fields
     const { data: original, error: fetchErr } = await supabase
-      .from("spa_employees")
+      .from("employees")
       .select("*")
       .eq("id", id)
       .single();
@@ -208,7 +235,7 @@ export const supabaseDb = {
     const dbPayload = mapEmployeeToDb(merged);
 
     const { data, error } = await supabase
-      .from("spa_employees")
+      .from("employees")
       .update(dbPayload)
       .eq("id", id)
       .select("*")
@@ -224,7 +251,7 @@ export const supabaseDb = {
   async deleteEmployee(id: string): Promise<boolean> {
     if (!supabase) throw new Error("Supabase is not configured");
     const { error } = await supabase
-      .from("spa_employees")
+      .from("employees")
       .delete()
       .eq("id", id);
 
@@ -238,7 +265,7 @@ export const supabaseDb = {
   async getServices(): Promise<Service[]> {
     if (!supabase) return [];
     const { data, error } = await supabase
-      .from("spa_services")
+      .from("services")
       .select("*")
       .order("created_at", { ascending: true });
 
@@ -253,7 +280,7 @@ export const supabaseDb = {
     if (!supabase) throw new Error("Supabase is not configured");
     const dbPayload = mapServiceToDb(svc);
     const { data, error } = await supabase
-      .from("spa_services")
+      .from("services")
       .insert(dbPayload)
       .select("*")
       .single();
@@ -269,7 +296,7 @@ export const supabaseDb = {
     if (!supabase) throw new Error("Supabase is not configured");
 
     const { data: original, error: fetchErr } = await supabase
-      .from("spa_services")
+      .from("services")
       .select("*")
       .eq("id", id)
       .single();
@@ -280,7 +307,7 @@ export const supabaseDb = {
     const dbPayload = mapServiceToDb(merged);
 
     const { data, error } = await supabase
-      .from("spa_services")
+      .from("services")
       .update(dbPayload)
       .eq("id", id)
       .select("*")
@@ -296,7 +323,7 @@ export const supabaseDb = {
   async deleteService(id: string): Promise<boolean> {
     if (!supabase) throw new Error("Supabase is not configured");
     const { error } = await supabase
-      .from("spa_services")
+      .from("services")
       .delete()
       .eq("id", id);
 
@@ -310,12 +337,12 @@ export const supabaseDb = {
   async getLeads(): Promise<Booking[]> {
     if (!supabase) return [];
     const { data, error } = await supabase
-      .from("spa_leads")
+      .from("bookings")
       .select("*")
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Supabase error fetching leads:", error);
+      console.error("Supabase error fetching bookings:", error);
       throw error;
     }
     return (data || []).map(mapLeadFromDb);
@@ -325,13 +352,13 @@ export const supabaseDb = {
     if (!supabase) throw new Error("Supabase is not configured");
     const dbPayload = mapLeadToDb(lead);
     const { data, error } = await supabase
-      .from("spa_leads")
+      .from("bookings")
       .insert(dbPayload)
       .select("*")
       .single();
 
     if (error) {
-      console.error("Supabase error adding lead:", error);
+      console.error("Supabase error adding booking:", error);
       throw error;
     }
     return mapLeadFromDb(data);
@@ -341,7 +368,7 @@ export const supabaseDb = {
     if (!supabase) throw new Error("Supabase is not configured");
 
     const { data: original, error: fetchErr } = await supabase
-      .from("spa_leads")
+      .from("bookings")
       .select("*")
       .eq("id", id)
       .single();
@@ -352,14 +379,14 @@ export const supabaseDb = {
     const dbPayload = mapLeadToDb(merged);
 
     const { data, error } = await supabase
-      .from("spa_leads")
+      .from("bookings")
       .update(dbPayload)
       .eq("id", id)
       .select("*")
       .single();
 
     if (error) {
-      console.error("Supabase error updating lead:", error);
+      console.error("Supabase error updating booking:", error);
       throw error;
     }
     return mapLeadFromDb(data);
@@ -368,12 +395,56 @@ export const supabaseDb = {
   async deleteLead(id: string): Promise<boolean> {
     if (!supabase) throw new Error("Supabase is not configured");
     const { error } = await supabase
-      .from("spa_leads")
+      .from("bookings")
       .delete()
       .eq("id", id);
 
     if (error) {
-      console.error("Supabase error deleting lead:", error);
+      console.error("Supabase error deleting booking:", error);
+      throw error;
+    }
+    return true;
+  },
+
+  async getReviews(): Promise<Review[]> {
+    if (!supabase) return [];
+    const { data, error } = await supabase
+      .from("reviews")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Supabase error fetching reviews:", error);
+      throw error;
+    }
+    return (data || []).map(mapReviewFromDb);
+  },
+
+  async addReview(rev: Review): Promise<Review> {
+    if (!supabase) throw new Error("Supabase is not configured");
+    const dbPayload = mapReviewToDb(rev);
+    const { data, error } = await supabase
+      .from("reviews")
+      .insert(dbPayload)
+      .select("*")
+      .single();
+
+    if (error) {
+      console.error("Supabase error adding review:", error);
+      throw error;
+    }
+    return mapReviewFromDb(data);
+  },
+
+  async deleteReview(id: string): Promise<boolean> {
+    if (!supabase) throw new Error("Supabase is not configured");
+    const { error } = await supabase
+      .from("reviews")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      console.error("Supabase error deleting review:", error);
       throw error;
     }
     return true;

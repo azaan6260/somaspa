@@ -66,6 +66,9 @@ export default function App() {
         if (data.metadata) {
           setMetadata(data.metadata);
         }
+        if (data.reviews) {
+          setReviewsList(data.reviews);
+        }
       }
     } catch (err) {
       console.error("Error loading dynamic db state in parent App:", err);
@@ -103,7 +106,7 @@ export default function App() {
     if (serviceName) {
       setPreselectedService(serviceName);
     } else {
-      setPreselectedService(services[0]?.name || "Abhyanga Shanti Ayurvedic Massage");
+      setPreselectedService(services[0]?.name || "Abhyanga – Full Body Ayurvedic Oil Massage");
     }
     setShowBookingModal(true);
   };
@@ -117,25 +120,35 @@ export default function App() {
     ? services 
     : services.filter(s => s.category === selectedCategory);
 
-  const handleAddReviewSubmit = (e: FormEvent) => {
+  const handleAddReviewSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!newReview.name || !newReview.comment) return;
 
-    const addedReview: Review = {
-      id: `rev-${Date.now()}`,
-      name: newReview.name,
-      location: "Indore, Madhya Pradesh",
-      rating: Number(newReview.rating),
-      comment: newReview.comment,
-      date: "Today",
-      service: newReview.service
-    };
-
-    setReviewsList([addedReview, ...reviewsList]);
-    setNewReview({ name: "", comment: "", rating: 5, service: services[0]?.name || "Abhyanga Shanti Ayurvedic Massage" });
-    setShowAddReview(false);
-    setReviewSuccess(true);
-    setTimeout(() => setReviewSuccess(false), 4000);
+    try {
+      const res = await fetch("/api/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newReview.name,
+          location: "Indore, Madhya Pradesh",
+          rating: Number(newReview.rating),
+          comment: newReview.comment,
+          service: newReview.service
+        })
+      });
+      if (res.ok) {
+        const addedReview = await res.json();
+        setReviewsList([addedReview, ...reviewsList]);
+        setNewReview({ name: "", comment: "", rating: 5, service: services[0]?.name || "Abhyanga – Full Body Ayurvedic Oil Massage" });
+        setShowAddReview(false);
+        setReviewSuccess(true);
+        setTimeout(() => setReviewSuccess(false), 4000);
+      } else {
+        console.error("Failed to submit review");
+      }
+    } catch (err) {
+      console.error("Error submitting review:", err);
+    }
   };
 
   return (
@@ -446,7 +459,7 @@ export default function App() {
 
                   <button
                     onClick={() => {
-                      setPreselectedService(services[0]?.name || "Abhyanga Shanti Ayurvedic Massage");
+                      setPreselectedService(services[0]?.name || "Abhyanga – Full Body Ayurvedic Oil Massage");
                       // Set selected therapist in form when modal opens
                       handleOpenBooking();
                     }}
