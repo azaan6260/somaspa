@@ -641,15 +641,15 @@ app.get("/api/db", async (req, res) => {
         }
         reviews = await supabaseDb.getReviews();
       }
-      res.json({ metadata, employees, services, leads, reviews });
+      res.json({ metadata, employees, services, leads, reviews, dbType: "supabase", isSupabaseConfigured: true, supabaseError: null });
     } else {
       db = loadDB();
-      res.json(db);
+      res.json({ ...db, dbType: "local", isSupabaseConfigured: false, supabaseError: null });
     }
   } catch (err: any) {
     console.error("Failed to load DB state:", err);
     db = loadDB();
-    res.json(db);
+    res.json({ ...db, dbType: "local", isSupabaseConfigured: isSupabaseConfigured, supabaseError: err.message || String(err) });
   }
 });
 

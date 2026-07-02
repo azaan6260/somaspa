@@ -44,6 +44,9 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
     employees: Employee[];
     services: Service[];
     leads: Booking[];
+    dbType?: "supabase" | "local";
+    isSupabaseConfigured?: boolean;
+    supabaseError?: string | null;
   } | null>(null);
 
   const [loading, setLoading] = useState(false);
@@ -119,6 +122,7 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
   const [leadsSearch, setLeadsSearch] = useState("");
   const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
   const [leadNotesText, setLeadNotesText] = useState("");
+  const [showSqlSchema, setShowSqlSchema] = useState(false);
 
   // Fetch bills from backend
   const fetchBills = async () => {
@@ -868,6 +872,226 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
                   </div>
                 </div>
 
+              </div>
+
+              {/* Database Connection & Diagnostics status */}
+              <div className="bg-slate-900 text-slate-100 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl relative overflow-hidden">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+                  <div className="flex items-start space-x-4">
+                    <div className={`p-3 rounded-2xl shrink-0 ${
+                      dbState.dbType === "supabase" && !dbState.supabaseError
+                        ? "bg-green-500/10 text-green-400 border border-green-500/20"
+                        : dbState.supabaseError
+                        ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                        : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                    }`}>
+                      <ShieldCheck className="w-6 h-6 animate-pulse" />
+                    </div>
+                    <div>
+                      <h3 className="font-serif text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                        Database Engine Connectivity
+                      </h3>
+                      <p className="text-xs text-slate-400 font-sans mt-0.5">
+                        Operational state diagnostics for SOMA Spa databases
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {dbState.dbType === "supabase" && !dbState.supabaseError ? (
+                      <>
+                        <span className="bg-green-500/10 text-green-400 text-xs font-bold px-3 py-1 rounded-full border border-green-500/20 flex items-center gap-1.5 font-mono">
+                          <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
+                          SUPABASE ACTIVE
+                        </span>
+                        <span className="bg-blue-500/10 text-blue-400 text-xs font-bold px-3 py-1 rounded-full border border-blue-500/20 font-mono">
+                          CLOUD MODE
+                        </span>
+                      </>
+                    ) : dbState.supabaseError ? (
+                      <>
+                        <span className="bg-red-500/10 text-red-400 text-xs font-bold px-3 py-1 rounded-full border border-red-500/20 flex items-center gap-1.5 font-mono">
+                          <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                          CONNECTION ERROR
+                        </span>
+                        <span className="bg-amber-500/10 text-amber-400 text-xs font-bold px-3 py-1 rounded-full border border-amber-500/20 font-mono">
+                          LOCAL FALLBACK ACTIVE
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="bg-amber-500/10 text-amber-400 text-xs font-bold px-3 py-1 rounded-full border border-amber-500/20 flex items-center gap-1.5 font-mono">
+                          <span className="w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
+                          DEMO SANDBOX MODE
+                        </span>
+                        <span className="bg-slate-800 text-slate-300 text-xs font-bold px-3 py-1 rounded-full border border-slate-700 font-mono">
+                          LOCAL JSON FILE
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {dbState.dbType === "supabase" && !dbState.supabaseError ? (
+                    <div className="text-sm text-slate-300 leading-relaxed font-sans max-w-4xl space-y-2">
+                      <p>
+                        Your backoffice is <strong className="text-green-400">fully connected to your production Supabase database</strong>. All customer reviews, booked ayurvedic leads, therapist registrations, timing updates, and menu adjustments are live, secure, and globally distributed.
+                      </p>
+                      <p className="text-xs text-slate-400 font-mono">
+                        • Verified tables: `spa_metadata`, `employees`, `services`, `bookings`, `reviews` are fully synchronized.
+                      </p>
+                    </div>
+                  ) : dbState.supabaseError ? (
+                    <div className="p-4 bg-red-950/30 border border-red-800/40 rounded-2xl space-y-3">
+                      <div className="flex items-start space-x-2.5 text-red-300 text-sm">
+                        <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                        <div>
+                          <strong className="block font-semibold">Supabase Connection Attempt Failed</strong>
+                          <p className="mt-1 text-xs text-red-400/90 font-mono whitespace-pre-wrap">
+                            Error description: {dbState.supabaseError}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                        Your Supabase credentials (<code className="text-indigo-300">SUPABASE_URL</code> and <code className="text-indigo-300">SUPABASE_ANON_KEY</code>) are present in your environment secrets, but the database client threw an error. This almost always means the **required database tables do not exist yet** in your Supabase project. To resolve this, run the SQL setup schema script below in your Supabase SQL editor.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-slate-300 leading-relaxed font-sans max-w-4xl space-y-3">
+                      <p>
+                        The application is currently running in <strong className="text-amber-400">Demo Sandbox Mode</strong> using a local database (<code className="font-mono text-indigo-300">server_db.json</code>). While fully functional for testing, modifications will not be saved permanently to a cloud database if the container restarts.
+                      </p>
+                      <div className="bg-slate-850/80 border border-slate-800 rounded-2xl p-4 space-y-2 text-xs">
+                        <strong className="text-indigo-400 font-mono uppercase tracking-wider block">How to connect your live Supabase database:</strong>
+                        <ol className="list-decimal pl-4 space-y-1.5 text-slate-400">
+                          <li>Create a free account or project at <a href="https://supabase.com" target="_blank" rel="noopener noreferrer" className="text-sky-400 underline hover:text-sky-300">Supabase.com</a>.</li>
+                          <li>Open your Supabase **Project Settings** &gt; **API** to copy your **Project URL** and **anon public Key**.</li>
+                          <li>Open the **Secrets Panel** (or Settings Gear) in your Google AI Studio workspace and add:
+                            <code className="block bg-slate-900 border border-slate-800 text-indigo-300 px-2.5 py-1 rounded mt-1 font-mono font-bold whitespace-pre-wrap">
+{`SUPABASE_URL=your_supabase_project_url
+SUPABASE_ANON_KEY=your_supabase_anon_public_key`}
+                            </code>
+                          </li>
+                          <li>Click **Sync DB** or restart the development server to activate the cloud connection instantly!</li>
+                        </ol>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="pt-2">
+                    <button
+                      onClick={() => setShowSqlSchema(!showSqlSchema)}
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500/30 rounded-xl px-5 py-2.5 text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer"
+                    >
+                      <FileText className="w-4 h-4" />
+                      <span>{showSqlSchema ? "Hide SQL Setup Script" : "View Supabase SQL Setup Schema"}</span>
+                    </button>
+                  </div>
+
+                  {showSqlSchema && (
+                    <div className="space-y-3 animate-scale-up pt-2">
+                      <p className="text-xs text-slate-400 leading-relaxed">
+                        Copy and execute the following SQL statement in the **SQL Editor** tab inside your Supabase dashboard to create all required database tables and seed SOMA's default Indore branch details instantly:
+                      </p>
+                      <div className="relative">
+                        <pre className="bg-slate-950 text-indigo-300 border border-slate-800 rounded-2xl p-5 text-[11px] font-mono overflow-x-auto max-h-72 leading-relaxed whitespace-pre select-all">
+{`-- 1. Create spa_metadata table
+CREATE TABLE IF NOT EXISTS spa_metadata (
+  id UUID PRIMARY KEY,
+  title TEXT NOT NULL,
+  tagline TEXT,
+  description TEXT,
+  address TEXT,
+  phone TEXT,
+  email TEXT,
+  logo_palette TEXT,
+  hours JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 2. Create employees table
+CREATE TABLE IF NOT EXISTS employees (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL,
+  specialty TEXT,
+  experience TEXT,
+  rating NUMERIC DEFAULT 5.0,
+  avatar_url TEXT,
+  salary NUMERIC DEFAULT 0,
+  status TEXT DEFAULT 'Active',
+  attendance JSONB DEFAULT '{}'::jsonb,
+  salaries_paid JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. Create services table
+CREATE TABLE IF NOT EXISTS services (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  duration TEXT,
+  price NUMERIC DEFAULT 0,
+  category TEXT,
+  description TEXT,
+  benefits JSONB DEFAULT '[]'::jsonb,
+  image_url TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4. Create bookings table
+CREATE TABLE IF NOT EXISTS bookings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  email TEXT,
+  phone TEXT NOT NULL,
+  service TEXT NOT NULL,
+  date TEXT NOT NULL,
+  time TEXT NOT NULL,
+  therapist TEXT,
+  status TEXT DEFAULT 'Confirmed',
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 5. Create reviews table
+CREATE TABLE IF NOT EXISTS reviews (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  location TEXT,
+  rating NUMERIC DEFAULT 5,
+  comment TEXT,
+  date TEXT,
+  service TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Seed default metadata row (Required)
+INSERT INTO spa_metadata (id, title, tagline, description, address, phone, email, logo_palette, hours)
+VALUES (
+  '00000000-0000-0000-0000-000000000000',
+  'Soma Spa',
+  'SPA & WELLNESS CENTRE',
+  'Welcome to Soma spa and wellness center, a premium holistic oasis combining ancient healing modalities with modern sensory refinement. Indulge in warm customized oils, organic face treatments, and tailored aromatherapies designed to soothe and restore.',
+  '19 GH, 2nd Floor, Mittal Kachori building, scheme no 54, Vijay nagar, Indore 452010',
+  '+91 89823 71810',
+  'hello@somaspaindore.com',
+  'sunset-gold',
+  '[
+    {"day": "Monday", "open": "08:00 AM", "close": "09:30 PM"},
+    {"day": "Tuesday", "open": "08:00 AM", "close": "09:30 PM"},
+    {"day": "Wednesday", "open": "08:00 AM", "close": "09:30 PM"},
+    {"day": "Thursday", "open": "08:00 AM", "close": "09:30 PM"},
+    {"day": "Friday", "open": "08:00 AM", "close": "09:30 PM"},
+    {"day": "Saturday", "open": "08:00 AM", "close": "09:30 PM"},
+    {"day": "Sunday", "open": "08:00 AM", "close": "09:30 PM"}
+  ]'::jsonb
+) ON CONFLICT (id) DO NOTHING;`}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Operational Metadata Snippet Card */}
