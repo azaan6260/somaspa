@@ -41,6 +41,24 @@ export default function App() {
   const [therapists, setTherapists] = useState<Therapist[]>(THERAPISTS);
   const [metadata, setMetadata] = useState<SpaMetadata | null>(null);
   const [newReview, setNewReview] = useState({ name: "", comment: "", rating: 5, service: SERVICES[0].name });
+  const [customLogoUrl, setCustomLogoUrl] = useState<string | undefined>(undefined);
+
+  const fetchLogoStatus = async () => {
+    try {
+      const res = await fetch("/api/logo-status");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.hasCustomLogo) {
+          // Add a cache busting query parameter to force dynamic update
+          setCustomLogoUrl(`${data.logoSmallUrl}?t=${Date.now()}`);
+        } else {
+          setCustomLogoUrl(undefined);
+        }
+      }
+    } catch (err) {
+      console.error("Error loading logo status in App component:", err);
+    }
+  };
 
   const fetchDbState = async () => {
     try {
@@ -91,6 +109,7 @@ export default function App() {
   useEffect(() => {
     fetchDbState();
     fetchBookings();
+    fetchLogoStatus();
   }, []);
 
   useEffect(() => {
@@ -166,6 +185,7 @@ export default function App() {
         setCurrentTab={setCurrentTab} 
         onOpenQuickBook={handleOpenBooking} 
         logoPalette={metadata?.logoPalette || "sunset-gold"}
+        customLogoUrl={customLogoUrl}
       />
 
       {/* Main Content Stage */}
@@ -627,7 +647,13 @@ export default function App() {
         {/* TAB 6: ADMIN PORTAL */}
         {currentTab === "admin" && (
           <div id="tab-admin" className="space-y-6 animate-fade-in">
-            <AdminDashboard onRefreshApp={fetchDbState} logoPalette={metadata?.logoPalette || "sunset-gold"} />
+            <AdminDashboard 
+              onRefreshApp={() => {
+                fetchDbState();
+                fetchLogoStatus();
+              }} 
+              logoPalette={metadata?.logoPalette || "sunset-gold"} 
+            />
           </div>
         )}
 

@@ -12,7 +12,9 @@ import { REVIEWS } from "./src/data";
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: "15mb" }));
+app.use(express.urlencoded({ limit: "15mb", extended: true }));
+app.use("/assets", express.static(path.join(process.cwd(), "assets")));
 
 // Initialize Gemini SDK with telemetry header User-Agent: 'aistudio-build'
 const ai = new GoogleGenAI({
@@ -737,6 +739,149 @@ app.post("/api/db/metadata", async (req, res) => {
     }
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to update metadata" });
+  }
+});
+
+// GET custom logo status and URL paths
+app.get("/api/logo-status", (req, res) => {
+  try {
+    const assetsDir = path.join(process.cwd(), "assets");
+    const logoLargePath = path.join(assetsDir, "logo-large.png");
+    const favicon32Path = path.join(assetsDir, "favicon-32x32.png");
+    
+    const hasCustomLogo = fs.existsSync(logoLargePath);
+    const hasCustomFavicon = fs.existsSync(favicon32Path);
+    
+    let version = Date.now();
+    if (hasCustomLogo) {
+      try {
+        version = Math.floor(fs.statSync(logoLargePath).mtimeMs);
+      } catch (e) {
+        // use default version
+      }
+    }
+    
+    res.json({
+      hasCustomLogo,
+      hasCustomFavicon,
+      logoLargeUrl: hasCustomLogo ? `/assets/logo-large.png?v=${version}` : null,
+      logoMediumUrl: hasCustomLogo ? `/assets/logo-medium.png?v=${version}` : null,
+      logoSmallUrl: hasCustomLogo ? `/assets/logo-small.png?v=${version}` : null,
+      favicon32Url: hasCustomFavicon ? `/assets/favicon-32x32.png?v=${version}` : null,
+      favicon16Url: hasCustomFavicon ? `/assets/favicon-16x16.png?v=${version}` : null,
+      version
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to retrieve logo status" });
+  }
+});
+
+// POST save generated/uploaded logos in all required sizes and formats
+app.post("/api/save-logo", (req, res) => {
+  try {
+    const { logoLarge, logoMedium, logoSmall, favicon32, favicon16, faviconSvg } = req.body;
+    const assetsDir = path.join(process.cwd(), "assets");
+    
+    if (!fs.existsSync(assetsDir)) {
+      fs.mkdirSync(assetsDir, { recursive: true });
+    }
+    
+    const saveBase64File = (base64Data: string, filename: string) => {
+      if (!base64Data) return;
+      const match = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (match) {
+        const buffer = Buffer.from(match[2], "base64");
+        fs.writeFileSync(path.join(assetsDir, filename), buffer);
+      } else if (base64Data.startsWith("data:")) {
+        // Fallback split
+        const parts = base64Data.split(";base64,");
+        if (parts.length === 2) {
+          const buffer = Buffer.from(parts[1], "base64");
+          fs.writeFileSync(path.join(assetsDir, filename), buffer);
+        }
+      }
+    };
+
+    if (logoLarge) saveBase64File(logoLarge, "logo-large.png");
+    if (logoMedium) saveBase64File(logoMedium, "logo-medium.png");
+    if (logoSmall) saveBase64File(logoSmall, "logo-small.png");
+    if (favicon32) saveBase64File(favicon32, "favicon-32x32.png");
+    if (favicon16) saveBase64File(favicon16, "favicon-16x16.png");
+    
+    if (faviconSvg) {
+      if (faviconSvg.startsWith("data:")) {
+        saveBase64File(faviconSvg, "favicon.svg");
+      } else {
+        fs.writeFileSync(path.join(assetsDir, "favicon.svg"), faviconSvg, "utf-8");
+      }
+    }
+    
+    res.json({ success: true, message: "Logo files processed and saved successfully in all formats and sizes." });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to save logo files" });
+  }
+});
+
+// POST delete custom logo and revert to original vector brand
+app.post("/api/delete-logo", (req, res) => {
+  try {
+    const assetsDir = path.join(process.cwd(), "assets");
+    const filesToDelete = [
+      "logo-large.png",
+      "logo-medium.png",
+      "logo-small.png",
+      "favicon-32x32.png",
+      "favicon-16x16.png"
+    ];
+    
+    filesToDelete.forEach(file => {
+      const filePath = path.join(assetsDir, file);
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+        } catch (e) {
+          // ignore
+        }
+      }
+    });
+
+    // Recreate default favicon.svg
+    const defaultSvgPath = path.join(assetsDir, "favicon.svg");
+    const defaultSvgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="32" height="32">
+  <defs>
+    <linearGradient id="soma-grad-default-teal-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#0F4C5C" />
+      <stop offset="100%" stopColor="#0B303B" />
+    </linearGradient>
+    <linearGradient id="soma-grad-default-gold-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stopColor="#8A662D" />
+      <stop offset="50%" stopColor="#D4A359" />
+      <stop offset="100%" stopColor="#F9E7B9" />
+    </linearGradient>
+  </defs>
+  <path d="M 33 46 C 26 44, 25 36, 33 34 C 32 38, 32 42, 33 46 Z" fill="url(#soma-grad-default-gold-grad)" opacity="0.9" />
+  <path d="M 41 27 C 35 22, 38 13, 47 12 C 44 18, 43 23, 41 27 Z" fill="url(#soma-grad-default-gold-grad)" opacity="0.9" />
+  <path d="M 59 27 C 65 22, 62 13, 53 12 C 56 18, 57 23, 59 27 Z" fill="url(#soma-grad-default-gold-grad)" opacity="0.9" />
+  <path d="M 67 46 C 74 44, 75 36, 67 34 C 68 38, 68 42, 67 46 Z" fill="url(#soma-grad-default-gold-grad)" opacity="0.9" />
+  <path d="M 35 48 C 24 43, 22 31, 33 29 C 34 34, 34 42, 35 48" fill="none" stroke="#0F4C5C" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  <path d="M 65 48 C 76 43, 78 31, 67 29 C 66 34, 66 42, 65 48" fill="none" stroke="#0F4C5C" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  <path d="M 50 16 C 43 25, 43 35, 50 42 C 57 35, 57 25, 50 16 Z" fill="none" stroke="#0F4C5C" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+  <circle cx="50" cy="33.5" r="3.5" fill="url(#soma-grad-default-teal-grad)" />
+  <path d="M 50 48 C 45 42, 38 41, 38 45.5 C 38 49.5, 46 51, 50 54.5" fill="none" stroke="#0F4C5C" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+  <path d="M 50 48 C 55 42, 62 41, 62 45.5 C 62 49.5, 54 51, 50 54.5" fill="none" stroke="#0F4C5C" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+  <path d="M 38 57 C 33 53, 41 49, 50 52 C 59 49, 67 53, 62 57 C 57 61, 43 61, 38 57 Z" fill="none" stroke="#0F4C5C" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+  <path d="M 43 62 C 46 64, 54 64, 57 62" fill="none" stroke="#0F4C5C" strokeWidth="1.5" strokeLinecap="round" />
+  <path d="M 46 65.5 C 48 67, 52 67, 54 65.5" fill="none" stroke="#0F4C5C" strokeWidth="1" strokeLinecap="round" />
+</svg>`;
+    try {
+      fs.writeFileSync(defaultSvgPath, defaultSvgContent, "utf-8");
+    } catch (e) {
+      // ignore
+    }
+
+    res.json({ success: true, message: "Custom logo deleted, reverted to original default brand." });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to delete custom logo" });
   }
 });
 

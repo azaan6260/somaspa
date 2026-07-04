@@ -6,9 +6,10 @@ interface NavbarProps {
   setCurrentTab: (tab: string) => void;
   onOpenQuickBook: (serviceName?: string) => void;
   logoPalette?: string;
+  customLogoUrl?: string | null;
 }
 
-export default function Navbar({ currentTab, setCurrentTab, onOpenQuickBook, logoPalette }: NavbarProps) {
+export default function Navbar({ currentTab, setCurrentTab, onOpenQuickBook, logoPalette, customLogoUrl }: NavbarProps) {
   const navItems = [
     { id: "home", label: "Home", icon: Compass },
     { id: "services", label: "Therapies", icon: BookOpen },
@@ -28,7 +29,7 @@ export default function Navbar({ currentTab, setCurrentTab, onOpenQuickBook, log
             className="flex items-center space-x-3 cursor-pointer group"
             onClick={() => setCurrentTab("home")}
           >
-            <SomaLogo size={42} palette={(logoPalette as any) || "sunset-gold"} className="group-hover:scale-105 transition-transform duration-300" />
+            <SomaLogo size={42} palette={(logoPalette as any) || "sunset-gold"} customLogoUrl={customLogoUrl} className="group-hover:scale-105 transition-transform duration-300" />
             <div>
               <span className="font-serif text-2xl tracking-wide font-bold text-[#0F172A] group-hover:text-indigo-600 transition-colors duration-300">
                 Soma Spa

@@ -124,6 +124,152 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
   const [leadNotesText, setLeadNotesText] = useState("");
   const [showSqlSchema, setShowSqlSchema] = useState(false);
 
+  // Logo brand kit state
+  const [logoStatus, setLogoStatus] = useState<any>(null);
+  const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+  const [processingLogo, setProcessingLogo] = useState(false);
+
+  const fetchLogoStatus = async () => {
+    try {
+      const res = await fetch("/api/logo-status");
+      if (res.ok) {
+        const data = await res.json();
+        setLogoStatus(data);
+      }
+    } catch (err) {
+      console.error("Error fetching logo status:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchLogoStatus();
+  }, []);
+
+  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!["image/jpeg", "image/png", "image/jpg"].includes(file.type)) {
+        showFeedback("error", "Invalid file type. Please upload a JPEG or PNG logo image.");
+        return;
+      }
+      setSelectedLogoFile(file);
+      setLogoPreviewUrl(URL.createObjectURL(file));
+    }
+  };
+
+  const processImageToSizes = (file: File): Promise<{
+    logoLarge: string;
+    logoMedium: string;
+    logoSmall: string;
+    favicon32: string;
+    favicon16: string;
+  }> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      img.onload = () => {
+        const sizes = {
+          logoLarge: 512,
+          logoMedium: 180,
+          logoSmall: 64,
+          favicon32: 32,
+          favicon16: 16
+        };
+        const results: any = {};
+        
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        
+        if (!ctx) {
+          reject(new Error("Could not initialize canvas graphics rendering interface."));
+          return;
+        }
+        
+        Object.entries(sizes).forEach(([key, size]) => {
+          canvas.width = size;
+          canvas.height = size;
+          ctx.clearRect(0, 0, size, size);
+          
+          // Preserving ratio using cover fit
+          const scale = Math.max(size / img.width, size / img.height);
+          const w = img.width * scale;
+          const h = img.height * scale;
+          const x = (size - w) / 2;
+          const y = (size - h) / 2;
+          
+          ctx.drawImage(img, x, y, w, h);
+          results[key] = canvas.toDataURL("image/png");
+        });
+        
+        resolve(results);
+      };
+      img.onerror = () => {
+        reject(new Error("Could not load image file. Ensure it is a valid JPEG/PNG."));
+      };
+    });
+  };
+
+  const handleProcessAndDeployLogo = async () => {
+    if (!selectedLogoFile) return;
+    setProcessingLogo(true);
+    try {
+      const sizes = await processImageToSizes(selectedLogoFile);
+      
+      const response = await fetch("/api/save-logo", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          logoLarge: sizes.logoLarge,
+          logoMedium: sizes.logoMedium,
+          logoSmall: sizes.logoSmall,
+          favicon32: sizes.favicon32,
+          favicon16: sizes.favicon16,
+          faviconSvg: sizes.logoSmall
+        })
+      });
+      
+      if (response.ok) {
+        showFeedback("success", "Custom brand logo processed and deployed successfully!");
+        setSelectedLogoFile(null);
+        setLogoPreviewUrl(null);
+        await fetchLogoStatus();
+        onRefreshApp();
+      } else {
+        showFeedback("error", "Failed to deploy processed brand assets.");
+      }
+    } catch (err: any) {
+      showFeedback("error", err.message || "Failed to process logo file.");
+    } finally {
+      setProcessingLogo(false);
+    }
+  };
+
+  const handleDeleteCustomLogo = async () => {
+    if (!window.confirm("Are you sure you want to delete the custom logo assets and revert to SOMA's default vector brand?")) {
+      return;
+    }
+    setProcessingLogo(true);
+    try {
+      const res = await fetch("/api/delete-logo", { method: "POST" });
+      if (res.ok) {
+        showFeedback("success", "Custom logo assets deleted. Reverted to default vector logo.");
+        setSelectedLogoFile(null);
+        setLogoPreviewUrl(null);
+        await fetchLogoStatus();
+        onRefreshApp();
+      } else {
+        showFeedback("error", "Failed to delete custom logo assets.");
+      }
+    } catch (err: any) {
+      showFeedback("error", "Failed to connect to logo delete service.");
+    } finally {
+      setProcessingLogo(false);
+    }
+  };
+
   // Fetch bills from backend
   const fetchBills = async () => {
     try {
@@ -1766,7 +1912,8 @@ VALUES (
 
           {/* TAB 4: SETTINGS, TIMINGS & ADDRESS */}
           {activeTab === "settings" && settingsForm && (
-            <form onSubmit={handleSaveSettings} className="space-y-8 animate-fade-in">
+            <>
+              <form onSubmit={handleSaveSettings} className="space-y-8 animate-fade-in">
               
               <div className="bg-white border border-indigo-50 rounded-2xl p-6 shadow-sm space-y-6">
                 <div className="border-b border-slate-100 pb-3 flex justify-between items-center">
@@ -1911,8 +2058,186 @@ VALUES (
                   ))}
                 </div>
               </div>
-
             </form>
+
+              {/* BRAND KIT & LOGO UPLOADER CARD */}
+              <div className="bg-white border border-indigo-50 rounded-2xl p-6 shadow-sm space-y-6 mt-8 animate-fade-in">
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-slate-900 flex items-center space-x-2 border-b border-slate-100 pb-2">
+                    <Award className="w-5 h-5 text-indigo-600" />
+                    <span>Soma Brand Asset Kit & Logo Deployer</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Upload your high-resolution corporate logo. Our system will automatically convert, optimize, and deploy it in all correct sizes (512px, 180px, 64px, and standard 32x32 & 16x16 favicons).
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* Left Column: File Upload Area */}
+                  <div className="space-y-4">
+                    <label className="block text-xs font-mono text-indigo-600 uppercase tracking-wider font-bold">
+                      Upload Brand Logo (PNG or JPEG)
+                    </label>
+                    <div 
+                      className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all flex flex-col items-center justify-center space-y-3 cursor-pointer ${
+                        selectedLogoFile 
+                          ? "border-indigo-500 bg-indigo-50/10" 
+                          : "border-slate-200 hover:border-indigo-400 bg-slate-50/30"
+                      }`}
+                      onClick={() => document.getElementById("brand-logo-file-input")?.click()}
+                    >
+                      <input 
+                        type="file" 
+                        id="brand-logo-file-input"
+                        accept="image/png, image/jpeg, image/jpg"
+                        className="hidden"
+                        onChange={handleLogoFileChange}
+                      />
+                      {logoPreviewUrl ? (
+                        <div className="relative group">
+                          <img 
+                            src={logoPreviewUrl} 
+                            alt="Logo preview" 
+                            className="h-28 w-28 object-contain rounded-xl shadow-md border border-slate-100 bg-white" 
+                          />
+                          <div className="absolute inset-0 bg-black/40 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <span className="text-[10px] text-white font-bold uppercase tracking-wider">Change Image</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <Download className="w-8 h-8 text-slate-400 mx-auto" />
+                          <div>
+                            <span className="text-xs font-bold text-indigo-600 block">Drag and drop or click to browse</span>
+                            <span className="text-[10px] text-slate-400 block mt-0.5">Supports high-res JPEG, JPG, PNG files</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {selectedLogoFile && (
+                      <div className="flex items-center justify-between bg-slate-50 border border-slate-100 px-4 py-2.5 rounded-xl text-xs">
+                        <div className="truncate font-semibold text-slate-700 max-w-[200px] sm:max-w-[300px]">
+                          {selectedLogoFile.name} ({(selectedLogoFile.size / 1024).toFixed(1)} KB)
+                        </div>
+                        <button 
+                          type="button" 
+                          onClick={() => { setSelectedLogoFile(null); setLogoPreviewUrl(null); }}
+                          className="text-red-500 hover:text-red-700 font-bold uppercase text-[10px]"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        disabled={!selectedLogoFile || processingLogo}
+                        onClick={handleProcessAndDeployLogo}
+                        className={`flex-1 min-w-[200px] rounded-full py-2.5 text-xs font-bold uppercase tracking-wider flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-sm ${
+                          selectedLogoFile && !processingLogo
+                            ? "bg-gradient-to-r from-indigo-600 to-sky-500 hover:from-indigo-500 hover:to-sky-400 text-white"
+                            : "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
+                        }`}
+                      >
+                        {processingLogo ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Deploying Brand...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Optimize & Deploy Logo</span>
+                          </>
+                        )}
+                      </button>
+
+                      {logoStatus?.hasCustomLogo && (
+                        <button
+                          type="button"
+                          disabled={processingLogo}
+                          onClick={handleDeleteCustomLogo}
+                          className="px-4 py-2.5 border border-red-100 hover:border-red-200 text-red-600 hover:bg-red-50/50 rounded-full text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+                        >
+                          Reset to Default Brand
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right Column: Deployed Brand Status */}
+                  <div className="bg-slate-50/60 border border-slate-100 rounded-2xl p-5 space-y-4">
+                    <h4 className="text-xs font-mono tracking-widest text-indigo-600 uppercase font-bold">
+                      Deployed Brand Asset Status
+                    </h4>
+                    
+                    <div className="space-y-3.5 text-xs">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                        <div className="space-y-0.5">
+                          <span className="font-bold text-slate-800 block">Large Corporate Logo</span>
+                          <span className="text-[10px] font-mono text-slate-400 block">512 x 512 px • PNG</span>
+                        </div>
+                        {logoStatus?.hasCustomLogo ? (
+                          <div className="flex items-center space-x-2.5">
+                            <span className="bg-green-50 text-green-700 font-bold px-2.5 py-0.5 rounded-full text-[10px] border border-green-100 uppercase">Deployed</span>
+                            <img referrerPolicy="no-referrer" src={logoStatus.logoLargeUrl} className="h-9 w-9 object-contain rounded-lg border bg-white shadow-sm" alt="Large Custom Logo" />
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 italic">Default vector active</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                        <div className="space-y-0.5">
+                          <span className="font-bold text-slate-800 block">Medium Touch Icon</span>
+                          <span className="text-[10px] font-mono text-slate-400 block">180 x 180 px • PNG</span>
+                        </div>
+                        {logoStatus?.hasCustomLogo ? (
+                          <div className="flex items-center space-x-2.5">
+                            <span className="bg-green-50 text-green-700 font-bold px-2.5 py-0.5 rounded-full text-[10px] border border-green-100 uppercase">Deployed</span>
+                            <img referrerPolicy="no-referrer" src={logoStatus.logoMediumUrl} className="h-9 w-9 object-contain rounded-lg border bg-white shadow-sm" alt="Medium Custom Logo" />
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 italic">Default vector active</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                        <div className="space-y-0.5">
+                          <span className="font-bold text-slate-800 block">Mini Navigation Icon</span>
+                          <span className="text-[10px] font-mono text-slate-400 block">64 x 64 px • PNG</span>
+                        </div>
+                        {logoStatus?.hasCustomLogo ? (
+                          <div className="flex items-center space-x-2.5">
+                            <span className="bg-green-50 text-green-700 font-bold px-2.5 py-0.5 rounded-full text-[10px] border border-green-100 uppercase">Deployed</span>
+                            <img referrerPolicy="no-referrer" src={logoStatus.logoSmallUrl} className="h-9 w-9 object-contain rounded-lg border bg-white shadow-sm" alt="Small Custom Logo" />
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 italic">Default vector active</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <span className="font-bold text-slate-800 block">Browser & Apple Favicon</span>
+                          <span className="text-[10px] font-mono text-slate-400 block">32x32 / 16x16 px • SVG fallback</span>
+                        </div>
+                        {logoStatus?.hasCustomFavicon ? (
+                          <div className="flex items-center space-x-2.5">
+                            <span className="bg-green-50 text-green-700 font-bold px-2.5 py-0.5 rounded-full text-[10px] border border-green-100 uppercase">Active</span>
+                            <img referrerPolicy="no-referrer" src={logoStatus.favicon32Url} className="h-8 w-8 object-contain rounded-lg border bg-white shadow-sm" alt="Favicon Custom Logo" />
+                          </div>
+                        ) : (
+                          <span className="bg-indigo-50 text-indigo-700 font-bold px-2.5 py-0.5 rounded-full text-[10px] border border-indigo-100 uppercase">Standard SVG Active</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
           )}
 
           {/* TAB 5: LEADS INBOX */}

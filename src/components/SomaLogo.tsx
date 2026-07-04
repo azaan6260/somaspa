@@ -9,6 +9,7 @@ export interface SomaLogoProps {
   showTagline?: boolean;
   circularBadgeStyle?: boolean;
   className?: string;
+  customLogoUrl?: string | null;
 }
 
 export const SomaLogo: React.FC<SomaLogoProps> = ({
@@ -18,7 +19,54 @@ export const SomaLogo: React.FC<SomaLogoProps> = ({
   showTagline = false,
   circularBadgeStyle = false,
   className = "",
+  customLogoUrl = null,
 }) => {
+  // If a custom uploaded/converted logo is configured, render it
+  if (customLogoUrl) {
+    if (circularBadgeStyle) {
+      return (
+        <div className={`flex flex-col items-center justify-center ${className}`}>
+          <div 
+            style={{ width: size, height: size }}
+            className="rounded-full overflow-hidden border border-indigo-100 shadow-md bg-white flex items-center justify-center p-1"
+          >
+            <img referrerPolicy="no-referrer" src={customLogoUrl} className="w-full h-full object-contain rounded-full" alt="Custom Logo" />
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className={`inline-flex items-center space-x-3.5 ${className}`}>
+        <img 
+          referrerPolicy="no-referrer"
+          src={customLogoUrl} 
+          style={{ width: size, height: size }} 
+          className="object-contain rounded-xl drop-shadow" 
+          alt="Custom Logo" 
+        />
+        {(showText || showTagline) && (
+          <div className="flex flex-col text-left">
+            {showText && (
+              <span className="font-serif text-2xl sm:text-3xl font-normal text-[#0F4C5C] tracking-[0.1em] uppercase leading-none">
+                Soma
+              </span>
+            )}
+            {showTagline && (
+              <div className="flex flex-col mt-1">
+                <span className="text-[8px] sm:text-[9px] font-sans tracking-[0.15em] text-[#0F4C5C] uppercase font-bold">
+                  SPA AND WELLNESS CENTER
+                </span>
+                <span className="text-[7px] sm:text-[8px] font-sans tracking-[0.2em] text-[#D4A359] uppercase font-bold mt-0.5">
+                  INDORE • INDIA
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // Dual-tone color configuration based on selected palette
   const getPaletteColors = () => {
     switch (palette) {
