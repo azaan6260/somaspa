@@ -550,7 +550,7 @@ const DEFAULT_SERVICES = [
 
 const DEFAULT_LEADS = [
   {
-    id: "bk-1",
+    id: "11111111-1111-1111-1111-111111111111",
     name: "Rajesh Sharma",
     email: "rajesh@example.com",
     phone: "9876543210",
@@ -563,7 +563,7 @@ const DEFAULT_LEADS = [
     createdAt: "2026-07-01T10:00:00Z"
   },
   {
-    id: "bk-2",
+    id: "22222222-2222-2222-2222-222222222222",
     name: "Priyanka Joshi",
     email: "priyanka@example.com",
     phone: "9823456789",
