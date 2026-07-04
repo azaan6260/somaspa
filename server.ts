@@ -7,6 +7,7 @@ import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import { isSupabaseConfigured, supabase, supabaseDb } from "./server_supabase";
+import { REVIEWS } from "./src/data";
 
 const app = express();
 const PORT = 3000;
@@ -635,7 +636,6 @@ app.get("/api/db", async (req, res) => {
         employees = await supabaseDb.getEmployees();
       }
       if (reviews.length === 0) {
-        const { REVIEWS } = require("./src/data");
         for (const r of REVIEWS) {
           await supabaseDb.addReview(r as any);
         }
@@ -674,7 +674,6 @@ app.post("/api/db/reset", async (req, res) => {
       for (const l of DEFAULT_LEADS) {
         await supabaseDb.addLead(l as any);
       }
-      const { REVIEWS } = require("./src/data");
       for (const r of REVIEWS) {
         await supabaseDb.addReview(r as any);
       }
