@@ -4,7 +4,6 @@ dotenv.config();
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import { isSupabaseConfigured, supabase, supabaseDb } from "./server_supabase";
 import { REVIEWS } from "./src/data";
@@ -1467,6 +1466,7 @@ When suggesting treatments:
 // Vite middleware setup
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -1485,7 +1485,11 @@ async function startServer() {
   });
 }
 
-startServer().catch((err) => {
-  console.error("Error setting up server:", err);
-});
+if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+  startServer().catch((err) => {
+    console.error("Error setting up server:", err);
+  });
+}
+
+export default app;
 

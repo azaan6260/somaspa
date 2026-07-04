@@ -4,11 +4,24 @@ import { SpaMetadata, Employee, Service, Booking, Review } from "./src/types";
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 
-export const isSupabaseConfigured = !!(supabaseUrl && supabaseKey);
+export const supabase = (() => {
+  if (!supabaseUrl || !supabaseKey) return null;
+  try {
+    const trimmedUrl = supabaseUrl.trim();
+    const trimmedKey = supabaseKey.trim();
+    if (!trimmedUrl || !trimmedKey) return null;
+    if (!trimmedUrl.startsWith("http://") && !trimmedUrl.startsWith("https://")) {
+      console.warn("Supabase URL must start with http:// or https://");
+      return null;
+    }
+    return createClient(trimmedUrl, trimmedKey);
+  } catch (err) {
+    console.error("Failed to initialize Supabase client:", err);
+    return null;
+  }
+})();
 
-export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl!, supabaseKey!)
-  : null;
+export const isSupabaseConfigured = !!supabase;
 
 // Constant UUID for single-record spa metadata row to match uuid type constraints
 const METADATA_UUID = "00000000-0000-0000-0000-000000000000";
