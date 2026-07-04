@@ -895,12 +895,15 @@ app.post("/api/delete-logo", (req, res) => {
 app.get("/api/bookings", async (req, res) => {
   try {
     if (isSupabaseConfigured) {
-      const leads = await supabaseDb.getLeads();
-      res.json(leads);
-    } else {
-      db = loadDB();
-      res.json(db.leads);
+      try {
+        const leads = await supabaseDb.getLeads();
+        return res.json(leads);
+      } catch (subErr: any) {
+        console.error("Supabase error fetching bookings, falling back to local:", subErr);
+      }
     }
+    db = loadDB();
+    res.json(db.leads);
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to fetch bookings" });
   }
@@ -928,13 +931,16 @@ app.post("/api/bookings", async (req, res) => {
     };
 
     if (isSupabaseConfigured) {
-      const lead = await supabaseDb.addLead(newBooking);
-      res.status(201).json(lead);
-    } else {
-      db.leads.unshift(newBooking);
-      saveDB(db);
-      res.status(201).json(newBooking);
+      try {
+        const lead = await supabaseDb.addLead(newBooking);
+        return res.status(201).json(lead);
+      } catch (subErr: any) {
+        console.error("Supabase error adding booking, falling back to local:", subErr);
+      }
     }
+    db.leads.unshift(newBooking);
+    saveDB(db);
+    res.status(201).json(newBooking);
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to book appointment" });
   }
@@ -944,16 +950,20 @@ app.post("/api/bookings", async (req, res) => {
 app.get("/api/reviews", async (req, res) => {
   try {
     if (isSupabaseConfigured) {
-      const reviews = await supabaseDb.getReviews();
-      res.json(reviews);
-    } else {
-      const localDb = loadDB();
-      res.json(localDb.reviews || []);
+      try {
+        const reviews = await supabaseDb.getReviews();
+        return res.json(reviews);
+      } catch (subErr: any) {
+        console.error("Supabase error fetching reviews, falling back to local:", subErr);
+      }
     }
+    const localDb = loadDB();
+    res.json(localDb.reviews || []);
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to fetch reviews" });
   }
 });
+
 
 app.post("/api/reviews", async (req, res) => {
   try {
