@@ -724,13 +724,28 @@ export default function App() {
         therapists={therapists}
         preselectedService={preselectedService}
         onBookingSuccess={handleBookingSuccess}
+        customLogoUrl={customLogoUrl}
       />
 
       {/* Styled Footer */}
       <footer className="mt-12 bg-slate-950 text-slate-200 py-12 px-4 border-t border-slate-800 font-mono text-xs">
         <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-3 gap-8 pb-8 border-b border-slate-800/60">
           <div className="space-y-3">
-            <span className="font-serif text-xl font-semibold tracking-wide text-white">{metadata?.title || "SOMA Spa"}</span>
+            <div className="flex items-center space-x-3 mb-3">
+              {customLogoUrl ? (
+                <img 
+                  referrerPolicy="no-referrer"
+                  src={customLogoUrl} 
+                  className="h-10 w-auto object-contain rounded-xl" 
+                  alt="Soma Custom Logo" 
+                />
+              ) : (
+                <div className="h-10 w-10 bg-indigo-950/80 border border-indigo-500/30 rounded-xl flex items-center justify-center text-indigo-400 font-serif font-bold text-lg">
+                  S
+                </div>
+              )}
+              <span className="font-serif text-xl font-semibold tracking-wide text-white">{metadata?.title || "SOMA Spa"}</span>
+            </div>
             <p className="text-slate-400 text-xs font-sans">
               {metadata?.tagline || "Premium holistic wellness and therapeutic sanctuary in Indore, Madhya Pradesh."}
             </p>

@@ -162,6 +162,12 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
     logoLarge: string;
     logoMedium: string;
     logoSmall: string;
+    logoLargeJpg: string;
+    logoMediumJpg: string;
+    logoSmallJpg: string;
+    logoLargeWebp: string;
+    logoMediumWebp: string;
+    logoSmallWebp: string;
     favicon32: string;
     favicon16: string;
   }> => {
@@ -200,6 +206,11 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
           
           ctx.drawImage(img, x, y, w, h);
           results[key] = canvas.toDataURL("image/png");
+          
+          if (key === "logoLarge" || key === "logoMedium" || key === "logoSmall") {
+            results[`${key}Jpg`] = canvas.toDataURL("image/jpeg", 0.9);
+            results[`${key}Webp`] = canvas.toDataURL("image/webp", 0.9);
+          }
         });
         
         resolve(results);
@@ -225,6 +236,12 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
           logoLarge: sizes.logoLarge,
           logoMedium: sizes.logoMedium,
           logoSmall: sizes.logoSmall,
+          logoLargeJpg: sizes.logoLargeJpg,
+          logoMediumJpg: sizes.logoMediumJpg,
+          logoSmallJpg: sizes.logoSmallJpg,
+          logoLargeWebp: sizes.logoLargeWebp,
+          logoMediumWebp: sizes.logoMediumWebp,
+          logoSmallWebp: sizes.logoSmallWebp,
           favicon32: sizes.favicon32,
           favicon16: sizes.favicon16,
           faviconSvg: sizes.logoSmall
@@ -2827,10 +2844,22 @@ VALUES (
                 <div id="printable-spa-invoice" className="font-sans text-slate-800 space-y-6">
                   {/* Spa Header */}
                   <div className="text-center pb-6 border-b border-dashed border-slate-200 space-y-2">
-                    <div className="flex justify-center items-center space-x-2">
-                      <Ticket className="w-6 h-6 text-indigo-600 print:text-indigo-600" />
-                      <span className="font-serif font-bold text-2xl tracking-widest text-slate-900 uppercase">SOMA</span>
-                    </div>
+                    {logoStatus?.hasCustomLogo ? (
+                      <div className="flex flex-col items-center space-y-2 mb-1">
+                        <img 
+                          referrerPolicy="no-referrer"
+                          src={logoStatus.logoMediumUrl} 
+                          className="h-14 w-auto object-contain mx-auto rounded-xl shadow-sm" 
+                          alt="Soma Custom Logo" 
+                        />
+                        <span className="font-serif font-bold text-lg tracking-widest text-slate-900 uppercase">SOMA</span>
+                      </div>
+                    ) : (
+                      <div className="flex justify-center items-center space-x-2">
+                        <Ticket className="w-6 h-6 text-indigo-600 print:text-indigo-600" />
+                        <span className="font-serif font-bold text-2xl tracking-widest text-slate-900 uppercase">SOMA</span>
+                      </div>
+                    )}
                     <p className="text-[10px] font-mono tracking-widest text-indigo-600 uppercase font-bold">Spa & Wellness Centre</p>
                     <p className="text-[11px] text-slate-500 max-w-xs mx-auto leading-relaxed">
                       19 GH, Mittal Kachori building, Scheme 54, Vijay nagar, Indore 452010 | +91 89823 71810

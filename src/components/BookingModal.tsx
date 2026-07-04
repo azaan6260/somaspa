@@ -9,6 +9,7 @@ interface BookingModalProps {
   therapists: Therapist[];
   preselectedService?: string;
   onBookingSuccess: () => void;
+  customLogoUrl?: string | null;
 }
 
 export default function BookingModal({
@@ -17,7 +18,8 @@ export default function BookingModal({
   services,
   therapists,
   preselectedService = "",
-  onBookingSuccess
+  onBookingSuccess,
+  customLogoUrl
 }: BookingModalProps) {
   const [formData, setFormData] = useState({
     name: "",
@@ -106,7 +108,16 @@ export default function BookingModal({
               
               <div className="flex items-center justify-between mb-4 pb-4 border-b border-indigo-100">
                 <div className="flex items-center space-x-2">
-                  <Ticket className="w-4 h-4 text-indigo-500" />
+                  {customLogoUrl ? (
+                    <img 
+                      referrerPolicy="no-referrer"
+                      src={customLogoUrl} 
+                      className="w-5 h-5 object-contain rounded-md" 
+                      alt="Logo" 
+                    />
+                  ) : (
+                    <Ticket className="w-4 h-4 text-indigo-500" />
+                  )}
                   <span className="font-serif font-bold text-slate-800">SOMA Spa Ticket</span>
                 </div>
                 <span className="font-mono text-xs text-indigo-600 uppercase font-bold">

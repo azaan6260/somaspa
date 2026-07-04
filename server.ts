@@ -773,6 +773,15 @@ app.get("/api/logo-status", (req, res) => {
       logoLargeUrl: hasCustomLogo ? `/assets/logo-large.png?v=${version}` : null,
       logoMediumUrl: hasCustomLogo ? `/assets/logo-medium.png?v=${version}` : null,
       logoSmallUrl: hasCustomLogo ? `/assets/logo-small.png?v=${version}` : null,
+      
+      logoLargeJpgUrl: hasCustomLogo && fs.existsSync(path.join(assetsDir, "logo-large.jpg")) ? `/assets/logo-large.jpg?v=${version}` : null,
+      logoMediumJpgUrl: hasCustomLogo && fs.existsSync(path.join(assetsDir, "logo-medium.jpg")) ? `/assets/logo-medium.jpg?v=${version}` : null,
+      logoSmallJpgUrl: hasCustomLogo && fs.existsSync(path.join(assetsDir, "logo-small.jpg")) ? `/assets/logo-small.jpg?v=${version}` : null,
+
+      logoLargeWebpUrl: hasCustomLogo && fs.existsSync(path.join(assetsDir, "logo-large.webp")) ? `/assets/logo-large.webp?v=${version}` : null,
+      logoMediumWebpUrl: hasCustomLogo && fs.existsSync(path.join(assetsDir, "logo-medium.webp")) ? `/assets/logo-medium.webp?v=${version}` : null,
+      logoSmallWebpUrl: hasCustomLogo && fs.existsSync(path.join(assetsDir, "logo-small.webp")) ? `/assets/logo-small.webp?v=${version}` : null,
+
       favicon32Url: hasCustomFavicon ? `/assets/favicon-32x32.png?v=${version}` : null,
       favicon16Url: hasCustomFavicon ? `/assets/favicon-16x16.png?v=${version}` : null,
       version
@@ -785,7 +794,12 @@ app.get("/api/logo-status", (req, res) => {
 // POST save generated/uploaded logos in all required sizes and formats
 app.post("/api/save-logo", (req, res) => {
   try {
-    const { logoLarge, logoMedium, logoSmall, favicon32, favicon16, faviconSvg } = req.body;
+    const { 
+      logoLarge, logoMedium, logoSmall, 
+      logoLargeJpg, logoMediumJpg, logoSmallJpg, 
+      logoLargeWebp, logoMediumWebp, logoSmallWebp, 
+      favicon32, favicon16, faviconSvg 
+    } = req.body;
     const assetsDir = path.join(process.cwd(), "assets");
     
     if (!fs.existsSync(assetsDir)) {
@@ -811,6 +825,15 @@ app.post("/api/save-logo", (req, res) => {
     if (logoLarge) saveBase64File(logoLarge, "logo-large.png");
     if (logoMedium) saveBase64File(logoMedium, "logo-medium.png");
     if (logoSmall) saveBase64File(logoSmall, "logo-small.png");
+    
+    if (logoLargeJpg) saveBase64File(logoLargeJpg, "logo-large.jpg");
+    if (logoMediumJpg) saveBase64File(logoMediumJpg, "logo-medium.jpg");
+    if (logoSmallJpg) saveBase64File(logoSmallJpg, "logo-small.jpg");
+    
+    if (logoLargeWebp) saveBase64File(logoLargeWebp, "logo-large.webp");
+    if (logoMediumWebp) saveBase64File(logoMediumWebp, "logo-medium.webp");
+    if (logoSmallWebp) saveBase64File(logoSmallWebp, "logo-small.webp");
+    
     if (favicon32) saveBase64File(favicon32, "favicon-32x32.png");
     if (favicon16) saveBase64File(favicon16, "favicon-16x16.png");
     
@@ -836,6 +859,12 @@ app.post("/api/delete-logo", (req, res) => {
       "logo-large.png",
       "logo-medium.png",
       "logo-small.png",
+      "logo-large.jpg",
+      "logo-medium.jpg",
+      "logo-small.jpg",
+      "logo-large.webp",
+      "logo-medium.webp",
+      "logo-small.webp",
       "favicon-32x32.png",
       "favicon-16x16.png"
     ];
