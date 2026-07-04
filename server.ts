@@ -15,15 +15,22 @@ app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ limit: "15mb", extended: true }));
 app.use("/assets", express.static(path.join(process.cwd(), "assets")));
 
-// Initialize Gemini SDK with telemetry header User-Agent: 'aistudio-build'
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    }
+// Initialize Gemini SDK lazily to prevent startup crashes when GEMINI_API_KEY is not defined
+let aiClient: GoogleGenAI | null = null;
+function getGeminiClient(): GoogleGenAI {
+  if (!aiClient) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    aiClient = new GoogleGenAI({
+      apiKey: apiKey || "placeholder_api_key_to_prevent_constructor_crash",
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
   }
-});
+  return aiClient;
+}
 
 // Database path
 const DB_FILE = path.join(process.cwd(), "server_db.json");
@@ -1446,7 +1453,7 @@ When suggesting treatments:
       parts: [{ text: message }]
     });
 
-    const response = await ai.models.generateContent({
+    const response = await getGeminiClient().models.generateContent({
       model: "gemini-3.5-flash",
       contents: contents,
       config: {
