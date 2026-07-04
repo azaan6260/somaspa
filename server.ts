@@ -13,6 +13,57 @@ const PORT = 3000;
 
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ limit: "15mb", extended: true }));
+
+// Interceptor for brand asset images to serve dynamically from DB/Cache
+app.get("/assets/:filename", async (req, res, next) => {
+  const filename = req.params.filename;
+  const logoFiles = [
+    "logo-large.png", "logo-medium.png", "logo-small.png",
+    "logo-large.jpg", "logo-medium.jpg", "logo-small.jpg",
+    "logo-large.webp", "logo-medium.webp", "logo-small.webp",
+    "favicon-32x32.png", "favicon-16x16.png", "favicon.svg"
+  ];
+  
+  if (logoFiles.includes(filename)) {
+    try {
+      const assets = await loadLogoCache();
+      if (assets) {
+        let base64Data = null;
+        let contentType = "image/png";
+        
+        if (filename === "logo-large.png") { base64Data = assets.logoLarge; contentType = "image/png"; }
+        else if (filename === "logo-medium.png") { base64Data = assets.logoMedium; contentType = "image/png"; }
+        else if (filename === "logo-small.png") { base64Data = assets.logoSmall; contentType = "image/png"; }
+        else if (filename === "logo-large.jpg") { base64Data = assets.logoLargeJpg; contentType = "image/jpeg"; }
+        else if (filename === "logo-medium.jpg") { base64Data = assets.logoMediumJpg; contentType = "image/jpeg"; }
+        else if (filename === "logo-small.jpg") { base64Data = assets.logoSmallJpg; contentType = "image/jpeg"; }
+        else if (filename === "logo-large.webp") { base64Data = assets.logoLargeWebp; contentType = "image/webp"; }
+        else if (filename === "logo-medium.webp") { base64Data = assets.logoMediumWebp; contentType = "image/webp"; }
+        else if (filename === "logo-small.webp") { base64Data = assets.logoSmallWebp; contentType = "image/webp"; }
+        else if (filename === "favicon-32x32.png") { base64Data = assets.favicon32; contentType = "image/png"; }
+        else if (filename === "favicon-16x16.png") { base64Data = assets.favicon16; contentType = "image/png"; }
+        else if (filename === "favicon.svg") { base64Data = assets.faviconSvg; contentType = "image/svg+xml"; }
+        
+        if (base64Data) {
+          let buffer: Buffer;
+          if (base64Data.startsWith("data:")) {
+            const parts = base64Data.split(";base64,");
+            buffer = Buffer.from(parts[1], "base64");
+          } else {
+            buffer = Buffer.from(base64Data, contentType === "image/svg+xml" ? "utf-8" : "base64");
+          }
+          res.setHeader("Content-Type", contentType);
+          res.setHeader("Cache-Control", "public, max-age=31536000");
+          return res.send(buffer);
+        }
+      }
+    } catch (err) {
+      console.error(`Error dynamically serving logo asset ${filename}:`, err);
+    }
+  }
+  next();
+});
+
 app.use("/assets", express.static(path.join(process.cwd(), "assets")));
 
 // Initialize Gemini SDK lazily to prevent startup crashes when GEMINI_API_KEY is not defined
@@ -748,60 +799,133 @@ app.post("/api/db/metadata", async (req, res) => {
   }
 });
 
-// GET custom logo status and URL paths
-app.get("/api/logo-status", (req, res) => {
+// Brand Logo Helpers for DB & Cache Persistence
+let logoCache: any = null;
+
+async function loadLogoCache() {
+  if (logoCache) return logoCache;
+  
+  // 1. First, check database if Supabase is configured
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from("spa_metadata")
+        .select("*")
+        .eq("id", "a55e7100-1090-1090-1090-109010901090")
+        .maybeSingle();
+        
+      if (data && data.hours) {
+        logoCache = data.hours;
+        console.log("Successfully loaded brand logo kit from Supabase.");
+        return logoCache;
+      }
+    } catch (err) {
+      console.error("Error fetching logo from Supabase on load:", err);
+    }
+  }
+
+  // 2. Check local JSON database if we store it there
   try {
-    const assetsDir = path.join(process.cwd(), "assets");
-    const logoLargePath = path.join(assetsDir, "logo-large.png");
-    const favicon32Path = path.join(assetsDir, "favicon-32x32.png");
-    
-    const hasCustomLogo = fs.existsSync(logoLargePath);
-    const hasCustomFavicon = fs.existsSync(favicon32Path);
-    
-    let version = Date.now();
-    if (hasCustomLogo) {
-      try {
-        version = Math.floor(fs.statSync(logoLargePath).mtimeMs);
-      } catch (e) {
-        // use default version
+    if (fs.existsSync(DB_FILE)) {
+      const fileContent = fs.readFileSync(DB_FILE, "utf-8");
+      const tempDb = JSON.parse(fileContent);
+      if (tempDb && tempDb.customLogos) {
+        logoCache = tempDb.customLogos;
+        console.log("Successfully loaded brand logo kit from local database.");
+        return logoCache;
       }
     }
-    
-    res.json({
-      hasCustomLogo,
-      hasCustomFavicon,
-      logoLargeUrl: hasCustomLogo ? `/assets/logo-large.png?v=${version}` : null,
-      logoMediumUrl: hasCustomLogo ? `/assets/logo-medium.png?v=${version}` : null,
-      logoSmallUrl: hasCustomLogo ? `/assets/logo-small.png?v=${version}` : null,
-      
-      logoLargeJpgUrl: hasCustomLogo && fs.existsSync(path.join(assetsDir, "logo-large.jpg")) ? `/assets/logo-large.jpg?v=${version}` : null,
-      logoMediumJpgUrl: hasCustomLogo && fs.existsSync(path.join(assetsDir, "logo-medium.jpg")) ? `/assets/logo-medium.jpg?v=${version}` : null,
-      logoSmallJpgUrl: hasCustomLogo && fs.existsSync(path.join(assetsDir, "logo-small.jpg")) ? `/assets/logo-small.jpg?v=${version}` : null,
-
-      logoLargeWebpUrl: hasCustomLogo && fs.existsSync(path.join(assetsDir, "logo-large.webp")) ? `/assets/logo-large.webp?v=${version}` : null,
-      logoMediumWebpUrl: hasCustomLogo && fs.existsSync(path.join(assetsDir, "logo-medium.webp")) ? `/assets/logo-medium.webp?v=${version}` : null,
-      logoSmallWebpUrl: hasCustomLogo && fs.existsSync(path.join(assetsDir, "logo-small.webp")) ? `/assets/logo-small.webp?v=${version}` : null,
-
-      favicon32Url: hasCustomFavicon ? `/assets/favicon-32x32.png?v=${version}` : null,
-      favicon16Url: hasCustomFavicon ? `/assets/favicon-16x16.png?v=${version}` : null,
-      version
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to retrieve logo status" });
+  } catch (e) {
+    // ignore
   }
-});
 
-// POST save generated/uploaded logos in all required sizes and formats
-app.post("/api/save-logo", (req, res) => {
+  // 3. Check filesystem fallback (for compatibility with existing assets)
+  const assetsDir = path.join(process.cwd(), "assets");
+  const logoLargePath = path.join(assetsDir, "logo-large.png");
+  if (fs.existsSync(logoLargePath)) {
+    try {
+      const readBase64 = (file: string, mime: string) => {
+        const filePath = path.join(assetsDir, file);
+        if (fs.existsSync(filePath)) {
+          return `data:${mime};base64,` + fs.readFileSync(filePath).toString("base64");
+        }
+        return null;
+      };
+      
+      logoCache = {
+        logoLarge: readBase64("logo-large.png", "image/png"),
+        logoMedium: readBase64("logo-medium.png", "image/png"),
+        logoSmall: readBase64("logo-small.png", "image/png"),
+        logoLargeJpg: readBase64("logo-large.jpg", "image/jpeg"),
+        logoMediumJpg: readBase64("logo-medium.jpg", "image/jpeg"),
+        logoSmallJpg: readBase64("logo-small.jpg", "image/jpeg"),
+        logoLargeWebp: readBase64("logo-large.webp", "image/webp"),
+        logoMediumWebp: readBase64("logo-medium.webp", "image/webp"),
+        logoSmallWebp: readBase64("logo-small.webp", "image/webp"),
+        favicon32: readBase64("favicon-32x32.png", "image/png"),
+        favicon16: readBase64("favicon-16x16.png", "image/png"),
+        faviconSvg: fs.existsSync(path.join(assetsDir, "favicon.svg")) 
+          ? fs.readFileSync(path.join(assetsDir, "favicon.svg"), "utf-8")
+          : null
+      };
+      console.log("Successfully loaded brand logo kit from local filesystem.");
+      return logoCache;
+    } catch (e) {
+      console.error("Failed to load logo assets from filesystem:", e);
+    }
+  }
+
+  return null;
+}
+
+async function saveLogoCache(assets: any) {
+  logoCache = assets;
+  
+  // 1. Save to local JSON db
   try {
-    const { 
-      logoLarge, logoMedium, logoSmall, 
-      logoLargeJpg, logoMediumJpg, logoSmallJpg, 
-      logoLargeWebp, logoMediumWebp, logoSmallWebp, 
-      favicon32, favicon16, faviconSvg 
-    } = req.body;
+    if (fs.existsSync(DB_FILE)) {
+      const fileContent = fs.readFileSync(DB_FILE, "utf-8");
+      const tempDb = JSON.parse(fileContent);
+      tempDb.customLogos = assets;
+      fs.writeFileSync(DB_FILE, JSON.stringify(tempDb, null, 2), "utf-8");
+      db = tempDb;
+    }
+  } catch (err) {
+    console.error("Failed to save logos to local JSON database:", err);
+  }
+  
+  // 2. Save to Supabase if configured
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const payload = {
+        id: "a55e7100-1090-1090-1090-109010901090",
+        title: "Soma Brand Assets",
+        tagline: "Custom Brand Logo Assets",
+        description: "Contains custom deployed logos and favicons in all required resolutions",
+        address: "Database",
+        phone: "N/A",
+        email: "N/A",
+        logo_palette: "N/A",
+        hours: assets
+      };
+      
+      const { error } = await supabase
+        .from("spa_metadata")
+        .upsert(payload);
+        
+      if (error) {
+        console.error("Error upserting custom logo to Supabase:", error);
+      } else {
+        console.log("Successfully saved custom logo to Supabase.");
+      }
+    } catch (err) {
+      console.error("Error saving custom logo to Supabase:", err);
+    }
+  }
+
+  // 3. Try filesystem write (fallback/cache, may fail on Vercel which is expected)
+  try {
     const assetsDir = path.join(process.cwd(), "assets");
-    
     if (!fs.existsSync(assetsDir)) {
       fs.mkdirSync(assetsDir, { recursive: true });
     }
@@ -813,7 +937,6 @@ app.post("/api/save-logo", (req, res) => {
         const buffer = Buffer.from(match[2], "base64");
         fs.writeFileSync(path.join(assetsDir, filename), buffer);
       } else if (base64Data.startsWith("data:")) {
-        // Fallback split
         const parts = base64Data.split(";base64,");
         if (parts.length === 2) {
           const buffer = Buffer.from(parts[1], "base64");
@@ -822,28 +945,139 @@ app.post("/api/save-logo", (req, res) => {
       }
     };
 
-    if (logoLarge) saveBase64File(logoLarge, "logo-large.png");
-    if (logoMedium) saveBase64File(logoMedium, "logo-medium.png");
-    if (logoSmall) saveBase64File(logoSmall, "logo-small.png");
+    if (assets.logoLarge) saveBase64File(assets.logoLarge, "logo-large.png");
+    if (assets.logoMedium) saveBase64File(assets.logoMedium, "logo-medium.png");
+    if (assets.logoSmall) saveBase64File(assets.logoSmall, "logo-small.png");
     
-    if (logoLargeJpg) saveBase64File(logoLargeJpg, "logo-large.jpg");
-    if (logoMediumJpg) saveBase64File(logoMediumJpg, "logo-medium.jpg");
-    if (logoSmallJpg) saveBase64File(logoSmallJpg, "logo-small.jpg");
+    if (assets.logoLargeJpg) saveBase64File(assets.logoLargeJpg, "logo-large.jpg");
+    if (assets.logoMediumJpg) saveBase64File(assets.logoMediumJpg, "logo-medium.jpg");
+    if (assets.logoSmallJpg) saveBase64File(assets.logoSmallJpg, "logo-small.jpg");
     
-    if (logoLargeWebp) saveBase64File(logoLargeWebp, "logo-large.webp");
-    if (logoMediumWebp) saveBase64File(logoMediumWebp, "logo-medium.webp");
-    if (logoSmallWebp) saveBase64File(logoSmallWebp, "logo-small.webp");
+    if (assets.logoLargeWebp) saveBase64File(assets.logoLargeWebp, "logo-large.webp");
+    if (assets.logoMediumWebp) saveBase64File(assets.logoMediumWebp, "logo-medium.webp");
+    if (assets.logoSmallWebp) saveBase64File(assets.logoSmallWebp, "logo-small.webp");
     
-    if (favicon32) saveBase64File(favicon32, "favicon-32x32.png");
-    if (favicon16) saveBase64File(favicon16, "favicon-16x16.png");
+    if (assets.favicon32) saveBase64File(assets.favicon32, "favicon-32x32.png");
+    if (assets.favicon16) saveBase64File(assets.favicon16, "favicon-16x16.png");
     
-    if (faviconSvg) {
-      if (faviconSvg.startsWith("data:")) {
-        saveBase64File(faviconSvg, "favicon.svg");
+    if (assets.faviconSvg) {
+      if (assets.faviconSvg.startsWith("data:")) {
+        saveBase64File(assets.faviconSvg, "favicon.svg");
       } else {
-        fs.writeFileSync(path.join(assetsDir, "favicon.svg"), faviconSvg, "utf-8");
+        fs.writeFileSync(path.join(assetsDir, "favicon.svg"), assets.faviconSvg, "utf-8");
       }
     }
+  } catch (e) {
+    console.warn("Could not write logo files to local filesystem (expected on read-only hosting like Vercel):", e);
+  }
+}
+
+async function deleteLogoCache() {
+  logoCache = null;
+  
+  // 1. Delete from local JSON db
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      const fileContent = fs.readFileSync(DB_FILE, "utf-8");
+      const tempDb = JSON.parse(fileContent);
+      delete tempDb.customLogos;
+      fs.writeFileSync(DB_FILE, JSON.stringify(tempDb, null, 2), "utf-8");
+      db = tempDb;
+    }
+  } catch (err) {
+    console.error("Failed to delete logos from local JSON database:", err);
+  }
+
+  // 2. Delete from Supabase
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { error } = await supabase
+        .from("spa_metadata")
+        .delete()
+        .eq("id", "a55e7100-1090-1090-1090-109010901090");
+        
+      if (error) {
+        console.error("Error deleting custom logo from Supabase:", error);
+      } else {
+        console.log("Successfully deleted custom logo from Supabase.");
+      }
+    } catch (err) {
+      console.error("Error deleting custom logo from Supabase:", err);
+    }
+  }
+
+  // 3. Delete from filesystem
+  try {
+    const assetsDir = path.join(process.cwd(), "assets");
+    const filesToDelete = [
+      "logo-large.png", "logo-medium.png", "logo-small.png",
+      "logo-large.jpg", "logo-medium.jpg", "logo-small.jpg",
+      "logo-large.webp", "logo-medium.webp", "logo-small.webp",
+      "favicon-32x32.png", "favicon-16x16.png", "favicon.svg"
+    ];
+    for (const file of filesToDelete) {
+      const filePath = path.join(assetsDir, file);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+  } catch (e) {
+    console.warn("Could not delete logo files from filesystem:", e);
+  }
+}
+
+// GET custom logo status and URL paths
+app.get("/api/logo-status", async (req, res) => {
+  try {
+    const assets = await loadLogoCache();
+    const hasCustomLogo = !!(assets && assets.logoLarge);
+    const hasCustomFavicon = !!(assets && assets.favicon32);
+    
+    const version = assets?.version || Date.now();
+    
+    res.json({
+      hasCustomLogo,
+      hasCustomFavicon,
+      logoLargeUrl: hasCustomLogo ? `/assets/logo-large.png?v=${version}` : null,
+      logoMediumUrl: hasCustomLogo ? `/assets/logo-medium.png?v=${version}` : null,
+      logoSmallUrl: hasCustomLogo ? `/assets/logo-small.png?v=${version}` : null,
+      
+      logoLargeJpgUrl: hasCustomLogo && assets.logoLargeJpg ? `/assets/logo-large.jpg?v=${version}` : null,
+      logoMediumJpgUrl: hasCustomLogo && assets.logoMediumJpg ? `/assets/logo-medium.jpg?v=${version}` : null,
+      logoSmallJpgUrl: hasCustomLogo && assets.logoSmallJpg ? `/assets/logo-small.jpg?v=${version}` : null,
+
+      logoLargeWebpUrl: hasCustomLogo && assets.logoLargeWebp ? `/assets/logo-large.webp?v=${version}` : null,
+      logoMediumWebpUrl: hasCustomLogo && assets.logoMediumWebp ? `/assets/logo-medium.webp?v=${version}` : null,
+      logoSmallWebpUrl: hasCustomLogo && assets.logoSmallWebp ? `/assets/logo-small.webp?v=${version}` : null,
+
+      favicon32Url: hasCustomFavicon ? `/assets/favicon-32x32.png?v=${version}` : null,
+      favicon16Url: hasCustomFavicon ? `/assets/favicon-16x16.png?v=${version}` : null,
+      version
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to retrieve logo status" });
+  }
+});
+
+// POST save generated/uploaded logos in all required sizes and formats
+app.post("/api/save-logo", async (req, res) => {
+  try {
+    const { 
+      logoLarge, logoMedium, logoSmall, 
+      logoLargeJpg, logoMediumJpg, logoSmallJpg, 
+      logoLargeWebp, logoMediumWebp, logoSmallWebp, 
+      favicon32, favicon16, faviconSvg 
+    } = req.body;
+    
+    const assets = {
+      logoLarge, logoMedium, logoSmall,
+      logoLargeJpg, logoMediumJpg, logoSmallJpg,
+      logoLargeWebp, logoMediumWebp, logoSmallWebp,
+      favicon32, favicon16, faviconSvg,
+      version: Date.now()
+    };
+    
+    await saveLogoCache(assets);
     
     res.json({ success: true, message: "Logo files processed and saved successfully in all formats and sizes." });
   } catch (err: any) {
@@ -852,37 +1086,15 @@ app.post("/api/save-logo", (req, res) => {
 });
 
 // POST delete custom logo and revert to original vector brand
-app.post("/api/delete-logo", (req, res) => {
+app.post("/api/delete-logo", async (req, res) => {
   try {
-    const assetsDir = path.join(process.cwd(), "assets");
-    const filesToDelete = [
-      "logo-large.png",
-      "logo-medium.png",
-      "logo-small.png",
-      "logo-large.jpg",
-      "logo-medium.jpg",
-      "logo-small.jpg",
-      "logo-large.webp",
-      "logo-medium.webp",
-      "logo-small.webp",
-      "favicon-32x32.png",
-      "favicon-16x16.png"
-    ];
-    
-    filesToDelete.forEach(file => {
-      const filePath = path.join(assetsDir, file);
-      if (fs.existsSync(filePath)) {
-        try {
-          fs.unlinkSync(filePath);
-        } catch (e) {
-          // ignore
-        }
-      }
-    });
+    await deleteLogoCache();
 
-    // Recreate default favicon.svg
-    const defaultSvgPath = path.join(assetsDir, "favicon.svg");
-    const defaultSvgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="32" height="32">
+    // Recreate default favicon.svg locally if possible
+    try {
+      const assetsDir = path.join(process.cwd(), "assets");
+      const defaultSvgPath = path.join(assetsDir, "favicon.svg");
+      const defaultSvgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="32" height="32">
   <defs>
     <linearGradient id="soma-grad-default-teal-grad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stopColor="#0F4C5C" />
@@ -908,7 +1120,6 @@ app.post("/api/delete-logo", (req, res) => {
   <path d="M 43 62 C 46 64, 54 64, 57 62" fill="none" stroke="#0F4C5C" strokeWidth="1.5" strokeLinecap="round" />
   <path d="M 46 65.5 C 48 67, 52 67, 54 65.5" fill="none" stroke="#0F4C5C" strokeWidth="1" strokeLinecap="round" />
 </svg>`;
-    try {
       fs.writeFileSync(defaultSvgPath, defaultSvgContent, "utf-8");
     } catch (e) {
       // ignore
