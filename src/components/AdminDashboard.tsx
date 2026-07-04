@@ -170,6 +170,7 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
     logoSmallWebp: string;
     favicon32: string;
     favicon16: string;
+    faviconSvg: string;
   }> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -184,36 +185,62 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
         };
         const results: any = {};
         
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        
-        if (!ctx) {
-          reject(new Error("Could not initialize canvas graphics rendering interface."));
-          return;
-        }
-        
         Object.entries(sizes).forEach(([key, size]) => {
-          canvas.width = size;
-          canvas.height = size;
-          ctx.clearRect(0, 0, size, size);
+          // 1. Render PNG with transparent background
+          const pngCanvas = document.createElement("canvas");
+          pngCanvas.width = size;
+          pngCanvas.height = size;
+          const pngCtx = pngCanvas.getContext("2d");
           
-          // Preserving ratio using cover fit
-          const scale = Math.max(size / img.width, size / img.height);
-          const w = img.width * scale;
-          const h = img.height * scale;
-          const x = (size - w) / 2;
-          const y = (size - h) / 2;
+          if (pngCtx) {
+            // Using "Contain" fit to fit the entire logo inside the boundaries without cropping text/graphics
+            const scale = Math.min(size / img.width, size / img.height);
+            const w = img.width * scale;
+            const h = img.height * scale;
+            const x = (size - w) / 2;
+            const y = (size - h) / 2;
+            
+            pngCtx.drawImage(img, x, y, w, h);
+            results[key] = pngCanvas.toDataURL("image/png");
+            
+            // WebP supporting transparency
+            if (key === "logoLarge" || key === "logoMedium" || key === "logoSmall") {
+              results[`${key}Webp`] = pngCanvas.toDataURL("image/webp", 0.9);
+            }
+          }
           
-          ctx.drawImage(img, x, y, w, h);
-          results[key] = canvas.toDataURL("image/png");
-          
+          // 2. Render JPEG with a white background to prevent transparent areas from turning black
           if (key === "logoLarge" || key === "logoMedium" || key === "logoSmall") {
-            results[`${key}Jpg`] = canvas.toDataURL("image/jpeg", 0.9);
-            results[`${key}Webp`] = canvas.toDataURL("image/webp", 0.9);
+            const jpgCanvas = document.createElement("canvas");
+            jpgCanvas.width = size;
+            jpgCanvas.height = size;
+            const jpgCtx = jpgCanvas.getContext("2d");
+            
+            if (jpgCtx) {
+              jpgCtx.fillStyle = "#FFFFFF";
+              jpgCtx.fillRect(0, 0, size, size);
+              
+              const scale = Math.min(size / img.width, size / img.height);
+              const w = img.width * scale;
+              const h = img.height * scale;
+              const x = (size - w) / 2;
+              const y = (size - h) / 2;
+              
+              jpgCtx.drawImage(img, x, y, w, h);
+              results[`${key}Jpg`] = jpgCanvas.toDataURL("image/jpeg", 0.9);
+            }
           }
         });
         
-        resolve(results);
+        // Wrap the base64 PNG in a valid SVG document for favicon.svg so it renders properly in browsers
+        const svgString = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <image href="${results.logoSmall}" x="0" y="0" width="100" height="100" />
+</svg>`;
+        
+        resolve({
+          ...results,
+          faviconSvg: svgString
+        });
       };
       img.onerror = () => {
         reject(new Error("Could not load image file. Ensure it is a valid JPEG/PNG."));
@@ -244,7 +271,7 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
           logoSmallWebp: sizes.logoSmallWebp,
           favicon32: sizes.favicon32,
           favicon16: sizes.favicon16,
-          faviconSvg: sizes.logoSmall
+          faviconSvg: sizes.faviconSvg
         })
       });
       
