@@ -4,6 +4,7 @@ dotenv.config();
 import express from "express";
 import path from "path";
 import fs from "fs";
+import { Jimp } from "jimp";
 import { GoogleGenAI } from "@google/genai";
 import { isSupabaseConfigured, supabase, supabaseDb } from "./server_supabase";
 import { REVIEWS } from "./src/data";
@@ -894,25 +895,134 @@ async function loadLogoCache() {
   return null;
 }
 
-async function saveLogoCache(assets: any) {
-  logoCache = assets;
-  
-  // 1. Save to local JSON db
+async function processAndResizeBase64(
+  base64Data: string | null | undefined,
+  width: number,
+  height: number,
+  mimeType: string
+): Promise<string | null> {
+  if (!base64Data) return null;
   try {
+    let buffer: Buffer;
+    if (base64Data.startsWith("data:") && base64Data.includes(";base64,")) {
+      const parts = base64Data.split(";base64,");
+      const rawBase64 = parts[1] ? parts[1].trim() : "";
+      buffer = Buffer.from(rawBase64, "base64");
+    } else {
+      buffer = Buffer.from(base64Data.trim(), "base64");
+    }
+
+    const image = await Jimp.read(buffer);
+    
+    // Perform crop or resize to exact specific dimensions
+    if (typeof image.resize === "function") {
+      image.resize({ w: width, h: height });
+    } else if (typeof (image as any).resize === "function") {
+      (image as any).resize(width, height);
+    }
+    
+    let outputBuffer: Buffer;
+    if (typeof image.getBuffer === "function") {
+      outputBuffer = await image.getBuffer(mimeType as any);
+    } else {
+      outputBuffer = await (image as any).getBufferAsync(mimeType);
+    }
+    
+    return `data:${mimeType};base64,` + outputBuffer.toString("base64");
+  } catch (err) {
+    console.warn(`Jimp processing failed for ${width}x${height} (${mimeType}), falling back to original:`, err);
+    return base64Data;
+  }
+}
+
+async function saveLogoCache(assets: any) {
+  // We perform a database transaction to ensure the image upload and database record update are atomic.
+  // 1. First, process and resize all incoming base64 images server-side to ensure specific dimensions
+  console.log("Starting server-side image processing and resizing...");
+  
+  const processedAssets: any = {
+    version: Date.now(),
+    faviconSvg: assets.faviconSvg // SVGs are vector XML, keep as-is
+  };
+
+  // Perform server-side resizing to specific dimensions
+  // PNG formats
+  processedAssets.logoLarge = await processAndResizeBase64(assets.logoLarge, 512, 512, "image/png");
+  processedAssets.logoMedium = await processAndResizeBase64(assets.logoMedium, 180, 180, "image/png");
+  processedAssets.logoSmall = await processAndResizeBase64(assets.logoSmall, 64, 64, "image/png");
+  processedAssets.favicon32 = await processAndResizeBase64(assets.favicon32, 32, 32, "image/png");
+  processedAssets.favicon16 = await processAndResizeBase64(assets.favicon16, 16, 16, "image/png");
+
+  // JPEG formats
+  processedAssets.logoLargeJpg = await processAndResizeBase64(assets.logoLargeJpg || assets.logoLarge, 512, 512, "image/jpeg");
+  processedAssets.logoMediumJpg = await processAndResizeBase64(assets.logoMediumJpg || assets.logoMedium, 180, 180, "image/jpeg");
+  processedAssets.logoSmallJpg = await processAndResizeBase64(assets.logoSmallJpg || assets.logoSmall, 64, 64, "image/jpeg");
+
+  // WebP formats (Optional, if Jimp fails on webp, processAndResizeBase64 gracefully falls back to original webp)
+  processedAssets.logoLargeWebp = await processAndResizeBase64(assets.logoLargeWebp, 512, 512, "image/webp");
+  processedAssets.logoMediumWebp = await processAndResizeBase64(assets.logoMediumWebp, 180, 180, "image/webp");
+  processedAssets.logoSmallWebp = await processAndResizeBase64(assets.logoSmallWebp, 64, 64, "image/webp");
+
+  console.log("Server-side image processing completed. Initiating atomic transaction across databases and filesystem...");
+
+  // Keep backups for rollback in case of failure (implements an atomic transaction)
+  let backupLocalDb: any = null;
+  let localDbUpdated = false;
+  let backupSupabaseData: any = null;
+  let supabaseUpdated = false;
+  
+  const assetsDir = path.join(process.cwd(), "assets");
+  const filesystemBackups: { [filename: string]: Buffer | null } = {};
+  const writtenFiles: string[] = [];
+
+  try {
+    // A. Back up existing local assets from disk if they exist, so we can restore them on failure
+    const filesToManage = [
+      "logo-large.png", "logo-medium.png", "logo-small.png",
+      "logo-large.jpg", "logo-medium.jpg", "logo-small.jpg",
+      "logo-large.webp", "logo-medium.webp", "logo-small.webp",
+      "favicon-32x32.png", "favicon-16x16.png", "favicon.svg"
+    ];
+    for (const filename of filesToManage) {
+      const filePath = path.join(assetsDir, filename);
+      if (fs.existsSync(filePath)) {
+        filesystemBackups[filename] = fs.readFileSync(filePath);
+      } else {
+        filesystemBackups[filename] = null;
+      }
+    }
+
+    // B. Back up and Update Local JSON DB
     if (fs.existsSync(DB_FILE)) {
       const fileContent = fs.readFileSync(DB_FILE, "utf-8");
+      backupLocalDb = JSON.parse(fileContent);
+      
       const tempDb = JSON.parse(fileContent);
-      tempDb.customLogos = assets;
-      fs.writeFileSync(DB_FILE, JSON.stringify(tempDb, null, 2), "utf-8");
+      tempDb.customLogos = processedAssets;
+      
+      const tempDbPath = `${DB_FILE}.tmp`;
+      fs.writeFileSync(tempDbPath, JSON.stringify(tempDb, null, 2), "utf-8");
+      fs.renameSync(tempDbPath, DB_FILE);
+      
       db = tempDb;
+      localDbUpdated = true;
+      console.log("Local JSON database updated atomically.");
     }
-  } catch (err) {
-    console.error("Failed to save logos to local JSON database:", err);
-  }
-  
-  // 2. Save to Supabase if configured
-  if (isSupabaseConfigured && supabase) {
-    try {
+
+    // C. Back up and Update Supabase if configured
+    if (isSupabaseConfigured && supabase) {
+      const { data: backupRow, error: fetchErr } = await supabase
+        .from("spa_metadata")
+        .select("*")
+        .eq("id", "a55e7100-1090-1090-1090-109010901090")
+        .maybeSingle();
+      
+      if (fetchErr) {
+        console.warn("Could not fetch backup metadata from Supabase:", fetchErr);
+      } else {
+        backupSupabaseData = backupRow;
+      }
+
       const payload = {
         id: "a55e7100-1090-1090-1090-109010901090",
         title: "Soma Brand Assets",
@@ -922,72 +1032,126 @@ async function saveLogoCache(assets: any) {
         phone: "N/A",
         email: "N/A",
         logo_palette: "N/A",
-        hours: assets
+        hours: processedAssets
       };
       
-      const { error } = await supabase
+      const { error: upsertErr } = await supabase
         .from("spa_metadata")
         .upsert(payload);
         
-      if (error) {
-        console.error("Error upserting custom logo to Supabase:", error);
-      } else {
-        console.log("Successfully saved custom logo to Supabase.");
+      if (upsertErr) {
+        throw new Error(`Supabase logo update failed: ${upsertErr.message}`);
       }
-    } catch (err) {
-      console.error("Error saving custom logo to Supabase:", err);
+      
+      supabaseUpdated = true;
+      console.log("Supabase metadata table updated atomically.");
     }
-  }
 
-  // 3. Try filesystem write (fallback/cache, may fail on Vercel which is expected)
-  try {
-    const assetsDir = path.join(process.cwd(), "assets");
+    // D. Update Filesystem Assets Atomically
     if (!fs.existsSync(assetsDir)) {
       fs.mkdirSync(assetsDir, { recursive: true });
     }
-    
-    const saveBase64File = (base64Data: string, filename: string) => {
+
+    const saveBase64FileAtomically = (base64Data: string | null | undefined, filename: string) => {
       if (!base64Data) return;
-      try {
-        if (base64Data.includes(";base64,")) {
-          const parts = base64Data.split(";base64,");
-          if (parts[1]) {
-            const buffer = Buffer.from(parts[1].trim(), "base64");
-            fs.writeFileSync(path.join(assetsDir, filename), buffer);
-          }
-        } else {
-          const buffer = Buffer.from(base64Data.trim(), "base64");
-          fs.writeFileSync(path.join(assetsDir, filename), buffer);
-        }
-      } catch (err) {
-        console.error(`Failed to save base64 file ${filename}:`, err);
+      
+      let buffer: Buffer;
+      if (base64Data.startsWith("data:") && base64Data.includes(";base64,")) {
+        const parts = base64Data.split(";base64,");
+        buffer = Buffer.from(parts[1].trim(), "base64");
+      } else {
+        buffer = Buffer.from(base64Data.trim(), "base64");
       }
+      
+      const targetPath = path.join(assetsDir, filename);
+      const tempPath = `${targetPath}.tmp`;
+      
+      fs.writeFileSync(tempPath, buffer);
+      fs.renameSync(tempPath, targetPath);
+      writtenFiles.push(filename);
     };
 
-    if (assets.logoLarge) saveBase64File(assets.logoLarge, "logo-large.png");
-    if (assets.logoMedium) saveBase64File(assets.logoMedium, "logo-medium.png");
-    if (assets.logoSmall) saveBase64File(assets.logoSmall, "logo-small.png");
+    if (processedAssets.logoLarge) saveBase64FileAtomically(processedAssets.logoLarge, "logo-large.png");
+    if (processedAssets.logoMedium) saveBase64FileAtomically(processedAssets.logoMedium, "logo-medium.png");
+    if (processedAssets.logoSmall) saveBase64FileAtomically(processedAssets.logoSmall, "logo-small.png");
     
-    if (assets.logoLargeJpg) saveBase64File(assets.logoLargeJpg, "logo-large.jpg");
-    if (assets.logoMediumJpg) saveBase64File(assets.logoMediumJpg, "logo-medium.jpg");
-    if (assets.logoSmallJpg) saveBase64File(assets.logoSmallJpg, "logo-small.jpg");
+    if (processedAssets.logoLargeJpg) saveBase64FileAtomically(processedAssets.logoLargeJpg, "logo-large.jpg");
+    if (processedAssets.logoMediumJpg) saveBase64FileAtomically(processedAssets.logoMediumJpg, "logo-medium.jpg");
+    if (processedAssets.logoSmallJpg) saveBase64FileAtomically(processedAssets.logoSmallJpg, "logo-small.jpg");
     
-    if (assets.logoLargeWebp) saveBase64File(assets.logoLargeWebp, "logo-large.webp");
-    if (assets.logoMediumWebp) saveBase64File(assets.logoMediumWebp, "logo-medium.webp");
-    if (assets.logoSmallWebp) saveBase64File(assets.logoSmallWebp, "logo-small.webp");
+    if (processedAssets.logoLargeWebp) saveBase64FileAtomically(processedAssets.logoLargeWebp, "logo-large.webp");
+    if (processedAssets.logoMediumWebp) saveBase64FileAtomically(processedAssets.logoMediumWebp, "logo-medium.webp");
+    if (processedAssets.logoSmallWebp) saveBase64FileAtomically(processedAssets.logoSmallWebp, "logo-small.webp");
     
-    if (assets.favicon32) saveBase64File(assets.favicon32, "favicon-32x32.png");
-    if (assets.favicon16) saveBase64File(assets.favicon16, "favicon-16x16.png");
+    if (processedAssets.favicon32) saveBase64FileAtomically(processedAssets.favicon32, "favicon-32x32.png");
+    if (processedAssets.favicon16) saveBase64FileAtomically(processedAssets.favicon16, "favicon-16x16.png");
     
-    if (assets.faviconSvg) {
-      if (assets.faviconSvg.startsWith("data:")) {
-        saveBase64File(assets.faviconSvg, "favicon.svg");
+    if (processedAssets.faviconSvg) {
+      const targetPath = path.join(assetsDir, "favicon.svg");
+      const tempPath = `${targetPath}.tmp`;
+      if (processedAssets.faviconSvg.startsWith("data:")) {
+        saveBase64FileAtomically(processedAssets.faviconSvg, "favicon.svg");
       } else {
-        fs.writeFileSync(path.join(assetsDir, "favicon.svg"), assets.faviconSvg, "utf-8");
+        fs.writeFileSync(tempPath, processedAssets.faviconSvg, "utf-8");
+        fs.renameSync(tempPath, targetPath);
+        writtenFiles.push("favicon.svg");
       }
     }
-  } catch (e) {
-    console.warn("Could not write logo files to local filesystem (expected on read-only hosting like Vercel):", e);
+
+    console.log("Filesystem brand assets written atomically.");
+
+    // Update the in-memory cache on complete transaction success
+    logoCache = processedAssets;
+    console.log("Brand logo transaction fully completed and verified.");
+
+  } catch (err: any) {
+    console.error("Logo upload transaction failed! Rolling back database and filesystem to original state...", err);
+    
+    // 1. Rollback filesystem files
+    for (const filename of Object.keys(filesystemBackups)) {
+      const backupBuffer = filesystemBackups[filename];
+      const targetPath = path.join(assetsDir, filename);
+      if (backupBuffer) {
+        try {
+          fs.writeFileSync(targetPath, backupBuffer);
+        } catch (fsRbErr) {
+          console.error(`Failed to rollback file ${filename}:`, fsRbErr);
+        }
+      } else if (fs.existsSync(targetPath)) {
+        try {
+          fs.unlinkSync(targetPath);
+        } catch (fsRbErr) {
+          console.error(`Failed to delete added file ${filename} during rollback:`, fsRbErr);
+        }
+      }
+    }
+
+    // 2. Rollback Local JSON DB
+    if (localDbUpdated && backupLocalDb) {
+      try {
+        fs.writeFileSync(DB_FILE, JSON.stringify(backupLocalDb, null, 2), "utf-8");
+        db = backupLocalDb;
+        console.log("Local JSON database rolled back successfully.");
+      } catch (dbRbErr) {
+        console.error("Local JSON database rollback failed:", dbRbErr);
+      }
+    }
+
+    // 3. Rollback Supabase
+    if (supabaseUpdated && isSupabaseConfigured && supabase) {
+      try {
+        if (backupSupabaseData) {
+          await supabase.from("spa_metadata").upsert(backupSupabaseData);
+        } else {
+          await supabase.from("spa_metadata").delete().eq("id", "a55e7100-1090-1090-1090-109010901090");
+        }
+        console.log("Supabase rolled back successfully.");
+      } catch (sbRbErr) {
+        console.error("Supabase rollback failed:", sbRbErr);
+      }
+    }
+
+    throw new Error(`Logo deployment transaction failed: ${err.message || err}`);
   }
 }
 
