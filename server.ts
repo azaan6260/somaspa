@@ -963,7 +963,7 @@ async function saveLogoCache(assets: any) {
   processedAssets.logoMediumWebp = await processAndResizeBase64(assets.logoMediumWebp, 180, 180, "image/webp");
   processedAssets.logoSmallWebp = await processAndResizeBase64(assets.logoSmallWebp, 64, 64, "image/webp");
 
-  console.log("Server-side image processing completed. Initiating atomic transaction across databases and filesystem...");
+  console.log("Server-side image processing completed. Initiating atomic transaction across databases...");
 
   // Keep backups for rollback in case of failure (implements an atomic transaction)
   let backupLocalDb: any = null;
@@ -975,8 +975,8 @@ async function saveLogoCache(assets: any) {
   const filesystemBackups: { [filename: string]: Buffer | null } = {};
   const writtenFiles: string[] = [];
 
+  // A. Back up existing local assets from disk if they exist, so we can restore them on failure
   try {
-    // A. Back up existing local assets from disk if they exist, so we can restore them on failure
     const filesToManage = [
       "logo-large.png", "logo-medium.png", "logo-small.png",
       "logo-large.jpg", "logo-medium.jpg", "logo-small.jpg",
@@ -991,22 +991,47 @@ async function saveLogoCache(assets: any) {
         filesystemBackups[filename] = null;
       }
     }
+  } catch (fsErr) {
+    console.warn("Could not read local filesystem for logo backups (expected on read-only hosting):", fsErr);
+  }
 
-    // B. Back up and Update Local JSON DB
+  try {
+    // B. Update Local JSON DB representation
+    let fileContent = null;
     if (fs.existsSync(DB_FILE)) {
-      const fileContent = fs.readFileSync(DB_FILE, "utf-8");
-      backupLocalDb = JSON.parse(fileContent);
-      
-      const tempDb = JSON.parse(fileContent);
-      tempDb.customLogos = processedAssets;
-      
-      const tempDbPath = `${DB_FILE}.tmp`;
-      fs.writeFileSync(tempDbPath, JSON.stringify(tempDb, null, 2), "utf-8");
-      fs.renameSync(tempDbPath, DB_FILE);
-      
-      db = tempDb;
-      localDbUpdated = true;
-      console.log("Local JSON database updated atomically.");
+      try {
+        fileContent = fs.readFileSync(DB_FILE, "utf-8");
+      } catch (dbReadErr) {
+        console.warn("Could not read local JSON database file:", dbReadErr);
+      }
+    }
+
+    if (fileContent) {
+      try {
+        backupLocalDb = JSON.parse(fileContent);
+        
+        const tempDb = JSON.parse(fileContent);
+        tempDb.customLogos = processedAssets;
+        
+        const tempDbPath = `${DB_FILE}.tmp`;
+        fs.writeFileSync(tempDbPath, JSON.stringify(tempDb, null, 2), "utf-8");
+        fs.renameSync(tempDbPath, DB_FILE);
+        
+        db = tempDb;
+        localDbUpdated = true;
+        console.log("Local JSON database file updated atomically.");
+      } catch (dbWriteErr) {
+        console.warn("Could not write to local JSON database file (expected on read-only hosting):", dbWriteErr);
+        // Fall back to updating the in-memory db object anyway
+        if (db) {
+          db.customLogos = processedAssets;
+        }
+      }
+    } else {
+      // If we couldn't read/load DB file, at least update the memory reference
+      if (db) {
+        db.customLogos = processedAssets;
+      }
     }
 
     // C. Back up and Update Supabase if configured
@@ -1047,58 +1072,62 @@ async function saveLogoCache(assets: any) {
       console.log("Supabase metadata table updated atomically.");
     }
 
-    // D. Update Filesystem Assets Atomically
-    if (!fs.existsSync(assetsDir)) {
-      fs.mkdirSync(assetsDir, { recursive: true });
-    }
-
-    const saveBase64FileAtomically = (base64Data: string | null | undefined, filename: string) => {
-      if (!base64Data) return;
-      
-      let buffer: Buffer;
-      if (base64Data.startsWith("data:") && base64Data.includes(";base64,")) {
-        const parts = base64Data.split(";base64,");
-        buffer = Buffer.from(parts[1].trim(), "base64");
-      } else {
-        buffer = Buffer.from(base64Data.trim(), "base64");
+    // D. Update Filesystem Assets (Non-blocking fallback)
+    try {
+      if (!fs.existsSync(assetsDir)) {
+        fs.mkdirSync(assetsDir, { recursive: true });
       }
-      
-      const targetPath = path.join(assetsDir, filename);
-      const tempPath = `${targetPath}.tmp`;
-      
-      fs.writeFileSync(tempPath, buffer);
-      fs.renameSync(tempPath, targetPath);
-      writtenFiles.push(filename);
-    };
 
-    if (processedAssets.logoLarge) saveBase64FileAtomically(processedAssets.logoLarge, "logo-large.png");
-    if (processedAssets.logoMedium) saveBase64FileAtomically(processedAssets.logoMedium, "logo-medium.png");
-    if (processedAssets.logoSmall) saveBase64FileAtomically(processedAssets.logoSmall, "logo-small.png");
-    
-    if (processedAssets.logoLargeJpg) saveBase64FileAtomically(processedAssets.logoLargeJpg, "logo-large.jpg");
-    if (processedAssets.logoMediumJpg) saveBase64FileAtomically(processedAssets.logoMediumJpg, "logo-medium.jpg");
-    if (processedAssets.logoSmallJpg) saveBase64FileAtomically(processedAssets.logoSmallJpg, "logo-small.jpg");
-    
-    if (processedAssets.logoLargeWebp) saveBase64FileAtomically(processedAssets.logoLargeWebp, "logo-large.webp");
-    if (processedAssets.logoMediumWebp) saveBase64FileAtomically(processedAssets.logoMediumWebp, "logo-medium.webp");
-    if (processedAssets.logoSmallWebp) saveBase64FileAtomically(processedAssets.logoSmallWebp, "logo-small.webp");
-    
-    if (processedAssets.favicon32) saveBase64FileAtomically(processedAssets.favicon32, "favicon-32x32.png");
-    if (processedAssets.favicon16) saveBase64FileAtomically(processedAssets.favicon16, "favicon-16x16.png");
-    
-    if (processedAssets.faviconSvg) {
-      const targetPath = path.join(assetsDir, "favicon.svg");
-      const tempPath = `${targetPath}.tmp`;
-      if (processedAssets.faviconSvg.startsWith("data:")) {
-        saveBase64FileAtomically(processedAssets.faviconSvg, "favicon.svg");
-      } else {
-        fs.writeFileSync(tempPath, processedAssets.faviconSvg, "utf-8");
+      const saveBase64FileAtomically = (base64Data: string | null | undefined, filename: string) => {
+        if (!base64Data) return;
+        
+        let buffer: Buffer;
+        if (base64Data.startsWith("data:") && base64Data.includes(";base64,")) {
+          const parts = base64Data.split(";base64,");
+          buffer = Buffer.from(parts[1].trim(), "base64");
+        } else {
+          buffer = Buffer.from(base64Data.trim(), "base64");
+        }
+        
+        const targetPath = path.join(assetsDir, filename);
+        const tempPath = `${targetPath}.tmp`;
+        
+        fs.writeFileSync(tempPath, buffer);
         fs.renameSync(tempPath, targetPath);
-        writtenFiles.push("favicon.svg");
-      }
-    }
+        writtenFiles.push(filename);
+      };
 
-    console.log("Filesystem brand assets written atomically.");
+      if (processedAssets.logoLarge) saveBase64FileAtomically(processedAssets.logoLarge, "logo-large.png");
+      if (processedAssets.logoMedium) saveBase64FileAtomically(processedAssets.logoMedium, "logo-medium.png");
+      if (processedAssets.logoSmall) saveBase64FileAtomically(processedAssets.logoSmall, "logo-small.png");
+      
+      if (processedAssets.logoLargeJpg) saveBase64FileAtomically(processedAssets.logoLargeJpg, "logo-large.jpg");
+      if (processedAssets.logoMediumJpg) saveBase64FileAtomically(processedAssets.logoMediumJpg, "logo-medium.jpg");
+      if (processedAssets.logoSmallJpg) saveBase64FileAtomically(processedAssets.logoSmallJpg, "logo-small.jpg");
+      
+      if (processedAssets.logoLargeWebp) saveBase64FileAtomically(processedAssets.logoLargeWebp, "logo-large.webp");
+      if (processedAssets.logoMediumWebp) saveBase64FileAtomically(processedAssets.logoMediumWebp, "logo-medium.webp");
+      if (processedAssets.logoSmallWebp) saveBase64FileAtomically(processedAssets.logoSmallWebp, "logo-small.webp");
+      
+      if (processedAssets.favicon32) saveBase64FileAtomically(processedAssets.favicon32, "favicon-32x32.png");
+      if (processedAssets.favicon16) saveBase64FileAtomically(processedAssets.favicon16, "favicon-16x16.png");
+      
+      if (processedAssets.faviconSvg) {
+        const targetPath = path.join(assetsDir, "favicon.svg");
+        const tempPath = `${targetPath}.tmp`;
+        if (processedAssets.faviconSvg.startsWith("data:")) {
+          saveBase64FileAtomically(processedAssets.faviconSvg, "favicon.svg");
+        } else {
+          fs.writeFileSync(tempPath, processedAssets.faviconSvg, "utf-8");
+          fs.renameSync(tempPath, targetPath);
+          writtenFiles.push("favicon.svg");
+        }
+      }
+
+      console.log("Filesystem brand assets written atomically.");
+    } catch (fsWriteErr) {
+      console.warn("Could not write logo files to local filesystem (expected on read-only hosting like Vercel):", fsWriteErr);
+    }
 
     // Update the in-memory cache on complete transaction success
     logoCache = processedAssets;
@@ -1108,22 +1137,26 @@ async function saveLogoCache(assets: any) {
     console.error("Logo upload transaction failed! Rolling back database and filesystem to original state...", err);
     
     // 1. Rollback filesystem files
-    for (const filename of Object.keys(filesystemBackups)) {
-      const backupBuffer = filesystemBackups[filename];
-      const targetPath = path.join(assetsDir, filename);
-      if (backupBuffer) {
-        try {
-          fs.writeFileSync(targetPath, backupBuffer);
-        } catch (fsRbErr) {
-          console.error(`Failed to rollback file ${filename}:`, fsRbErr);
-        }
-      } else if (fs.existsSync(targetPath)) {
-        try {
-          fs.unlinkSync(targetPath);
-        } catch (fsRbErr) {
-          console.error(`Failed to delete added file ${filename} during rollback:`, fsRbErr);
+    try {
+      for (const filename of Object.keys(filesystemBackups)) {
+        const backupBuffer = filesystemBackups[filename];
+        const targetPath = path.join(assetsDir, filename);
+        if (backupBuffer) {
+          try {
+            fs.writeFileSync(targetPath, backupBuffer);
+          } catch (fsRbErr) {
+            console.error(`Failed to rollback file ${filename}:`, fsRbErr);
+          }
+        } else if (fs.existsSync(targetPath)) {
+          try {
+            fs.unlinkSync(targetPath);
+          } catch (fsRbErr) {
+            console.error(`Failed to delete added file ${filename} during rollback:`, fsRbErr);
+          }
         }
       }
+    } catch (fsRollbackErr) {
+      console.error("Error rolling back filesystem files:", fsRollbackErr);
     }
 
     // 2. Rollback Local JSON DB
