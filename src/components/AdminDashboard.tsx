@@ -243,6 +243,8 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
     zoom: number,
     offset: { x: number; y: number }
   ): Promise<{
+    logo?: string;
+    favicon?: string;
     logoLarge: string;
     logoMedium: string;
     logoSmall: string;
@@ -269,14 +271,6 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
             throw new Error("Loaded image has zero dimensions.");
           }
 
-          const sizes = {
-            logoLarge: 512,
-            logoMedium: 180,
-            logoSmall: 64,
-            favicon32: 32,
-            favicon16: 16
-          };
-          const results: any = {};
           const VP_SIZE = 240;
           
           // Match the layout calculations exactly
@@ -287,57 +281,72 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
           const currentWidth = baseWidth * zoom;
           const currentHeight = baseHeight * zoom;
           
-          Object.entries(sizes).forEach(([key, size]) => {
-            const scaleFactor = size / VP_SIZE;
+          // 1. Render ONE high-quality 512x512 PNG Canvas as the primary logo
+          const logoCanvas = document.createElement("canvas");
+          logoCanvas.width = 512;
+          logoCanvas.height = 512;
+          const logoCtx = logoCanvas.getContext("2d");
+          let logoDataUrl = "";
+          
+          if (logoCtx) {
+            const scaleFactor = 512 / VP_SIZE;
+            const drawWidth = currentWidth * scaleFactor;
+            const drawHeight = currentHeight * scaleFactor;
+            const drawX = (512 - drawWidth) / 2 + offset.x * scaleFactor;
+            const drawY = (512 - drawHeight) / 2 + offset.y * scaleFactor;
             
-            // 1. Render PNG with transparent background
-            const pngCanvas = document.createElement("canvas");
-            pngCanvas.width = size;
-            pngCanvas.height = size;
-            const pngCtx = pngCanvas.getContext("2d");
+            logoCtx.clearRect(0, 0, 512, 512);
+            logoCtx.drawImage(imgElement, drawX, drawY, drawWidth, drawHeight);
+            logoDataUrl = logoCanvas.toDataURL("image/png");
+          }
+          
+          // 2. Render ONE 64x64 PNG Canvas as the primary favicon
+          const faviconCanvas = document.createElement("canvas");
+          faviconCanvas.width = 64;
+          faviconCanvas.height = 64;
+          const faviconCtx = faviconCanvas.getContext("2d");
+          let faviconDataUrl = "";
+          
+          if (faviconCtx) {
+            const scaleFactor = 64 / VP_SIZE;
+            const drawWidth = currentWidth * scaleFactor;
+            const drawHeight = currentHeight * scaleFactor;
+            const drawX = (64 - drawWidth) / 2 + offset.x * scaleFactor;
+            const drawY = (64 - drawHeight) / 2 + offset.y * scaleFactor;
             
-            if (pngCtx) {
-              const drawWidth = currentWidth * scaleFactor;
-              const drawHeight = currentHeight * scaleFactor;
-              const drawX = (size - drawWidth) / 2 + offset.x * scaleFactor;
-              const drawY = (size - drawHeight) / 2 + offset.y * scaleFactor;
-              
-              // Clear to transparency
-              pngCtx.clearRect(0, 0, size, size);
-              pngCtx.drawImage(imgElement, drawX, drawY, drawWidth, drawHeight);
-              results[key] = pngCanvas.toDataURL("image/png");
-              
-              // WebP supporting transparency
-              if (key === "logoLarge" || key === "logoMedium" || key === "logoSmall") {
-                results[`${key}Webp`] = pngCanvas.toDataURL("image/webp", 0.9);
-              }
-            }
+            faviconCtx.clearRect(0, 0, 64, 64);
+            faviconCtx.drawImage(imgElement, drawX, drawY, drawWidth, drawHeight);
+            faviconDataUrl = faviconCanvas.toDataURL("image/png");
+          }
+          
+          // If canvases failed to initialize, use a simple fallback
+          if (!logoDataUrl) logoDataUrl = imgElement.src;
+          if (!faviconDataUrl) faviconDataUrl = logoDataUrl;
+
+          // Build a single results object mapping legacy and new formats to these optimized buffers
+          const results: any = {
+            logo: logoDataUrl,
+            favicon: faviconDataUrl,
             
-            // 2. Render JPEG with a white background to prevent transparent areas from turning black
-            if (key === "logoLarge" || key === "logoMedium" || key === "logoSmall") {
-              const jpgCanvas = document.createElement("canvas");
-              jpgCanvas.width = size;
-              jpgCanvas.height = size;
-              const jpgCtx = jpgCanvas.getContext("2d");
-              
-              if (jpgCtx) {
-                jpgCtx.fillStyle = "#FFFFFF";
-                jpgCtx.fillRect(0, 0, size, size);
-                
-                const drawWidth = currentWidth * scaleFactor;
-                const drawHeight = currentHeight * scaleFactor;
-                const drawX = (size - drawWidth) / 2 + offset.x * scaleFactor;
-                const drawY = (size - drawHeight) / 2 + offset.y * scaleFactor;
-                
-                jpgCtx.drawImage(imgElement, drawX, drawY, drawWidth, drawHeight);
-                results[`${key}Jpg`] = jpgCanvas.toDataURL("image/jpeg", 0.9);
-              }
-            }
-          });
+            logoLarge: logoDataUrl,
+            logoMedium: logoDataUrl,
+            logoSmall: logoDataUrl,
+            
+            logoLargeJpg: logoDataUrl,
+            logoMediumJpg: logoDataUrl,
+            logoSmallJpg: logoDataUrl,
+            
+            logoLargeWebp: logoDataUrl,
+            logoMediumWebp: logoDataUrl,
+            logoSmallWebp: logoDataUrl,
+            
+            favicon32: faviconDataUrl,
+            favicon16: faviconDataUrl
+          };
           
           // Wrap the base64 PNG in a valid SVG document for favicon.svg so it renders properly in browsers
           const svgString = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
-  <image href="${results.logoSmall}" x="0" y="0" width="100" height="100" />
+  <image href="${faviconDataUrl}" x="0" y="0" width="100" height="100" />
 </svg>`;
           
           resolve({
@@ -400,7 +409,8 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
         await fetchLogoStatus();
         onRefreshApp();
       } else {
-        showFeedback("error", "Failed to deploy processed brand assets.");
+        const errData = await response.json().catch(() => ({}));
+        showFeedback("error", `Failed to deploy processed brand assets: ${errData.error || response.statusText || "Unknown server error"}`);
       }
     } catch (err: any) {
       showFeedback("error", err.message || "Failed to process logo file.");

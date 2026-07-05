@@ -34,6 +34,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 app.get("/assets/:filename", async (req, res, next) => {
   const filename = req.params.filename;
   const logoFiles = [
+    "logo.png", "favicon.png",
     "logo-large.png", "logo-medium.png", "logo-small.png",
     "logo-large.jpg", "logo-medium.jpg", "logo-small.jpg",
     "logo-large.webp", "logo-medium.webp", "logo-small.webp",
@@ -47,18 +48,37 @@ app.get("/assets/:filename", async (req, res, next) => {
         let base64Data = null;
         let contentType = "image/png";
         
-        if (filename === "logo-large.png") { base64Data = assets.logoLarge; contentType = "image/png"; }
-        else if (filename === "logo-medium.png") { base64Data = assets.logoMedium; contentType = "image/png"; }
-        else if (filename === "logo-small.png") { base64Data = assets.logoSmall; contentType = "image/png"; }
-        else if (filename === "logo-large.jpg") { base64Data = assets.logoLargeJpg; contentType = "image/jpeg"; }
-        else if (filename === "logo-medium.jpg") { base64Data = assets.logoMediumJpg; contentType = "image/jpeg"; }
-        else if (filename === "logo-small.jpg") { base64Data = assets.logoSmallJpg; contentType = "image/jpeg"; }
-        else if (filename === "logo-large.webp") { base64Data = assets.logoLargeWebp; contentType = "image/webp"; }
-        else if (filename === "logo-medium.webp") { base64Data = assets.logoMediumWebp; contentType = "image/webp"; }
-        else if (filename === "logo-small.webp") { base64Data = assets.logoSmallWebp; contentType = "image/webp"; }
-        else if (filename === "favicon-32x32.png") { base64Data = assets.favicon32; contentType = "image/png"; }
-        else if (filename === "favicon-16x16.png") { base64Data = assets.favicon16; contentType = "image/png"; }
-        else if (filename === "favicon.svg") { base64Data = assets.faviconSvg; contentType = "image/svg+xml"; }
+        if (filename === "logo.png" || filename.startsWith("logo-")) {
+          base64Data = assets.logo || assets.logoLarge;
+          if (filename.endsWith(".jpg") || filename.endsWith(".jpeg")) contentType = "image/jpeg";
+          else if (filename.endsWith(".webp")) contentType = "image/webp";
+          else contentType = "image/png";
+          
+          // Legacy fallbacks if assets.logo doesn't exist
+          if (!assets.logo) {
+            if (filename === "logo-large.png") { base64Data = assets.logoLarge; }
+            else if (filename === "logo-medium.png") { base64Data = assets.logoMedium; }
+            else if (filename === "logo-small.png") { base64Data = assets.logoSmall; }
+            else if (filename === "logo-large.jpg") { base64Data = assets.logoLargeJpg; }
+            else if (filename === "logo-medium.jpg") { base64Data = assets.logoMediumJpg; }
+            else if (filename === "logo-small.jpg") { base64Data = assets.logoSmallJpg; }
+            else if (filename === "logo-large.webp") { base64Data = assets.logoLargeWebp; }
+            else if (filename === "logo-medium.webp") { base64Data = assets.logoMediumWebp; }
+            else if (filename === "logo-small.webp") { base64Data = assets.logoSmallWebp; }
+          }
+        } else if (filename === "favicon.png" || filename.startsWith("favicon-")) {
+          base64Data = assets.favicon || assets.favicon32;
+          contentType = "image/png";
+          
+          // Legacy fallbacks if assets.favicon doesn't exist
+          if (!assets.favicon) {
+            if (filename === "favicon-32x32.png") { base64Data = assets.favicon32; }
+            else if (filename === "favicon-16x16.png") { base64Data = assets.favicon16; }
+          }
+        } else if (filename === "favicon.svg") {
+          base64Data = assets.faviconSvg || assets.favicon || assets.logo;
+          contentType = "image/svg+xml";
+        }
         
         if (base64Data) {
           let buffer: Buffer;
@@ -901,7 +921,7 @@ async function processAndResizeBase64(
   height: number,
   mimeType: string
 ): Promise<string | null> {
-  if (!base64Data) return null;
+  if (!base64Data || typeof base64Data !== "string") return null;
   
   // High-performance optimization: the browser's hardware-accelerated Canvas has already 
   // cropped, scaled, and exported the image exactly to the target sizes (512x512, 180x180, etc.)
@@ -958,33 +978,30 @@ async function processAndResizeBase64(
 
 async function saveLogoCache(assets: any) {
   // We perform a database transaction to ensure the image upload and database record update are atomic.
-  // 1. First, process and resize all incoming base64 images server-side to ensure specific dimensions
-  console.log("Starting server-side image processing and resizing...");
+  // 1. First, process and clean all incoming base64 images
+  console.log("Starting server-side image processing...");
   
   const processedAssets: any = {
-    version: Date.now(),
-    faviconSvg: assets.faviconSvg // SVGs are vector XML, keep as-is
+    logo: assets.logo || assets.logoLarge,
+    favicon: assets.favicon || assets.favicon32,
+    faviconSvg: assets.faviconSvg,
+    version: Date.now()
   };
 
-  // Perform server-side resizing to specific dimensions
-  // PNG formats
-  processedAssets.logoLarge = await processAndResizeBase64(assets.logoLarge, 512, 512, "image/png");
-  processedAssets.logoMedium = await processAndResizeBase64(assets.logoMedium, 180, 180, "image/png");
-  processedAssets.logoSmall = await processAndResizeBase64(assets.logoSmall, 64, 64, "image/png");
-  processedAssets.favicon32 = await processAndResizeBase64(assets.favicon32, 32, 32, "image/png");
-  processedAssets.favicon16 = await processAndResizeBase64(assets.favicon16, 16, 16, "image/png");
+  // Preserve legacy fields for strict backward compatibility if they exist in the incoming object
+  if (assets.logoLarge) processedAssets.logoLarge = assets.logoLarge;
+  if (assets.logoMedium) processedAssets.logoMedium = assets.logoMedium;
+  if (assets.logoSmall) processedAssets.logoSmall = assets.logoSmall;
+  if (assets.logoLargeJpg) processedAssets.logoLargeJpg = assets.logoLargeJpg;
+  if (assets.logoMediumJpg) processedAssets.logoMediumJpg = assets.logoMediumJpg;
+  if (assets.logoSmallJpg) processedAssets.logoSmallJpg = assets.logoSmallJpg;
+  if (assets.logoLargeWebp) processedAssets.logoLargeWebp = assets.logoLargeWebp;
+  if (assets.logoMediumWebp) processedAssets.logoMediumWebp = assets.logoMediumWebp;
+  if (assets.logoSmallWebp) processedAssets.logoSmallWebp = assets.logoSmallWebp;
+  if (assets.favicon32) processedAssets.favicon32 = assets.favicon32;
+  if (assets.favicon16) processedAssets.favicon16 = assets.favicon16;
 
-  // JPEG formats
-  processedAssets.logoLargeJpg = await processAndResizeBase64(assets.logoLargeJpg || assets.logoLarge, 512, 512, "image/jpeg");
-  processedAssets.logoMediumJpg = await processAndResizeBase64(assets.logoMediumJpg || assets.logoMedium, 180, 180, "image/jpeg");
-  processedAssets.logoSmallJpg = await processAndResizeBase64(assets.logoSmallJpg || assets.logoSmall, 64, 64, "image/jpeg");
-
-  // WebP formats (Optional, if Jimp fails on webp, processAndResizeBase64 gracefully falls back to original webp)
-  processedAssets.logoLargeWebp = await processAndResizeBase64(assets.logoLargeWebp, 512, 512, "image/webp");
-  processedAssets.logoMediumWebp = await processAndResizeBase64(assets.logoMediumWebp, 180, 180, "image/webp");
-  processedAssets.logoSmallWebp = await processAndResizeBase64(assets.logoSmallWebp, 64, 64, "image/webp");
-
-  console.log("Server-side image processing completed. Initiating atomic transaction across databases...");
+  console.log("Image processing completed. Initiating atomic transaction across databases...");
 
   // Keep backups for rollback in case of failure (implements an atomic transaction)
   let backupLocalDb: any = null;
@@ -999,6 +1016,7 @@ async function saveLogoCache(assets: any) {
   // A. Back up existing local assets from disk if they exist, so we can restore them on failure
   try {
     const filesToManage = [
+      "logo.png", "favicon.png",
       "logo-large.png", "logo-medium.png", "logo-small.png",
       "logo-large.jpg", "logo-medium.jpg", "logo-small.jpg",
       "logo-large.webp", "logo-medium.webp", "logo-small.webp",
@@ -1122,20 +1140,46 @@ async function saveLogoCache(assets: any) {
         writtenFiles.push(filename);
       };
 
-      if (processedAssets.logoLarge) saveBase64FileAtomically(processedAssets.logoLarge, "logo-large.png");
-      if (processedAssets.logoMedium) saveBase64FileAtomically(processedAssets.logoMedium, "logo-medium.png");
-      if (processedAssets.logoSmall) saveBase64FileAtomically(processedAssets.logoSmall, "logo-small.png");
+      // 1. Write primary files
+      if (processedAssets.logo) {
+        saveBase64FileAtomically(processedAssets.logo, "logo.png");
+        
+        // Write backward-compatible sizes and formats instantly using the same high-quality logo buffer
+        saveBase64FileAtomically(processedAssets.logo, "logo-large.png");
+        saveBase64FileAtomically(processedAssets.logo, "logo-medium.png");
+        saveBase64FileAtomically(processedAssets.logo, "logo-small.png");
+        saveBase64FileAtomically(processedAssets.logo, "logo-large.jpg");
+        saveBase64FileAtomically(processedAssets.logo, "logo-medium.jpg");
+        saveBase64FileAtomically(processedAssets.logo, "logo-small.jpg");
+        saveBase64FileAtomically(processedAssets.logo, "logo-large.webp");
+        saveBase64FileAtomically(processedAssets.logo, "logo-medium.webp");
+        saveBase64FileAtomically(processedAssets.logo, "logo-small.webp");
+      }
       
-      if (processedAssets.logoLargeJpg) saveBase64FileAtomically(processedAssets.logoLargeJpg, "logo-large.jpg");
-      if (processedAssets.logoMediumJpg) saveBase64FileAtomically(processedAssets.logoMediumJpg, "logo-medium.jpg");
-      if (processedAssets.logoSmallJpg) saveBase64FileAtomically(processedAssets.logoSmallJpg, "logo-small.jpg");
-      
-      if (processedAssets.logoLargeWebp) saveBase64FileAtomically(processedAssets.logoLargeWebp, "logo-large.webp");
-      if (processedAssets.logoMediumWebp) saveBase64FileAtomically(processedAssets.logoMediumWebp, "logo-medium.webp");
-      if (processedAssets.logoSmallWebp) saveBase64FileAtomically(processedAssets.logoSmallWebp, "logo-small.webp");
-      
-      if (processedAssets.favicon32) saveBase64FileAtomically(processedAssets.favicon32, "favicon-32x32.png");
-      if (processedAssets.favicon16) saveBase64FileAtomically(processedAssets.favicon16, "favicon-16x16.png");
+      if (processedAssets.favicon) {
+        saveBase64FileAtomically(processedAssets.favicon, "favicon.png");
+        
+        // Write backward-compatible sizes and formats
+        saveBase64FileAtomically(processedAssets.favicon, "favicon-32x32.png");
+        saveBase64FileAtomically(processedAssets.favicon, "favicon-16x16.png");
+      }
+
+      // If we only have legacy files in processedAssets (fallback mode)
+      if (!processedAssets.logo) {
+        if (processedAssets.logoLarge) saveBase64FileAtomically(processedAssets.logoLarge, "logo-large.png");
+        if (processedAssets.logoMedium) saveBase64FileAtomically(processedAssets.logoMedium, "logo-medium.png");
+        if (processedAssets.logoSmall) saveBase64FileAtomically(processedAssets.logoSmall, "logo-small.png");
+        if (processedAssets.logoLargeJpg) saveBase64FileAtomically(processedAssets.logoLargeJpg, "logo-large.jpg");
+        if (processedAssets.logoMediumJpg) saveBase64FileAtomically(processedAssets.logoMediumJpg, "logo-medium.jpg");
+        if (processedAssets.logoSmallJpg) saveBase64FileAtomically(processedAssets.logoSmallJpg, "logo-small.jpg");
+        if (processedAssets.logoLargeWebp) saveBase64FileAtomically(processedAssets.logoLargeWebp, "logo-large.webp");
+        if (processedAssets.logoMediumWebp) saveBase64FileAtomically(processedAssets.logoMediumWebp, "logo-medium.webp");
+        if (processedAssets.logoSmallWebp) saveBase64FileAtomically(processedAssets.logoSmallWebp, "logo-small.webp");
+      }
+      if (!processedAssets.favicon) {
+        if (processedAssets.favicon32) saveBase64FileAtomically(processedAssets.favicon32, "favicon-32x32.png");
+        if (processedAssets.favicon16) saveBase64FileAtomically(processedAssets.favicon16, "favicon-16x16.png");
+      }
       
       if (processedAssets.faviconSvg) {
         const targetPath = path.join(assetsDir, "favicon.svg");
@@ -1251,6 +1295,7 @@ async function deleteLogoCache() {
   try {
     const assetsDir = path.join(process.cwd(), "assets");
     const filesToDelete = [
+      "logo.png", "favicon.png",
       "logo-large.png", "logo-medium.png", "logo-small.png",
       "logo-large.jpg", "logo-medium.jpg", "logo-small.jpg",
       "logo-large.webp", "logo-medium.webp", "logo-small.webp",
@@ -1271,8 +1316,8 @@ async function deleteLogoCache() {
 app.get("/api/logo-status", async (req, res) => {
   try {
     const assets = await loadLogoCache();
-    const hasCustomLogo = !!(assets && assets.logoLarge);
-    const hasCustomFavicon = !!(assets && assets.favicon32);
+    const hasCustomLogo = !!(assets && (assets.logo || assets.logoLarge));
+    const hasCustomFavicon = !!(assets && (assets.favicon || assets.favicon32));
     
     const version = assets?.version || Date.now();
     
@@ -1283,13 +1328,13 @@ app.get("/api/logo-status", async (req, res) => {
       logoMediumUrl: hasCustomLogo ? `/assets/logo-medium.png?v=${version}` : null,
       logoSmallUrl: hasCustomLogo ? `/assets/logo-small.png?v=${version}` : null,
       
-      logoLargeJpgUrl: hasCustomLogo && assets.logoLargeJpg ? `/assets/logo-large.jpg?v=${version}` : null,
-      logoMediumJpgUrl: hasCustomLogo && assets.logoMediumJpg ? `/assets/logo-medium.jpg?v=${version}` : null,
-      logoSmallJpgUrl: hasCustomLogo && assets.logoSmallJpg ? `/assets/logo-small.jpg?v=${version}` : null,
+      logoLargeJpgUrl: hasCustomLogo ? `/assets/logo-large.jpg?v=${version}` : null,
+      logoMediumJpgUrl: hasCustomLogo ? `/assets/logo-medium.jpg?v=${version}` : null,
+      logoSmallJpgUrl: hasCustomLogo ? `/assets/logo-small.jpg?v=${version}` : null,
 
-      logoLargeWebpUrl: hasCustomLogo && assets.logoLargeWebp ? `/assets/logo-large.webp?v=${version}` : null,
-      logoMediumWebpUrl: hasCustomLogo && assets.logoMediumWebp ? `/assets/logo-medium.webp?v=${version}` : null,
-      logoSmallWebpUrl: hasCustomLogo && assets.logoSmallWebp ? `/assets/logo-small.webp?v=${version}` : null,
+      logoLargeWebpUrl: hasCustomLogo ? `/assets/logo-large.webp?v=${version}` : null,
+      logoMediumWebpUrl: hasCustomLogo ? `/assets/logo-medium.webp?v=${version}` : null,
+      logoSmallWebpUrl: hasCustomLogo ? `/assets/logo-small.webp?v=${version}` : null,
 
       favicon32Url: hasCustomFavicon ? `/assets/favicon-32x32.png?v=${version}` : null,
       favicon16Url: hasCustomFavicon ? `/assets/favicon-16x16.png?v=${version}` : null,
@@ -1304,17 +1349,21 @@ app.get("/api/logo-status", async (req, res) => {
 app.post("/api/save-logo", async (req, res) => {
   try {
     const { 
+      logo, favicon, faviconSvg,
       logoLarge, logoMedium, logoSmall, 
       logoLargeJpg, logoMediumJpg, logoSmallJpg, 
       logoLargeWebp, logoMediumWebp, logoSmallWebp, 
-      favicon32, favicon16, faviconSvg 
+      favicon32, favicon16 
     } = req.body;
     
     const assets = {
+      logo: logo || logoLarge,
+      favicon: favicon || favicon32,
+      faviconSvg,
       logoLarge, logoMedium, logoSmall,
       logoLargeJpg, logoMediumJpg, logoSmallJpg,
       logoLargeWebp, logoMediumWebp, logoSmallWebp,
-      favicon32, favicon16, faviconSvg,
+      favicon32, favicon16,
       version: Date.now()
     };
     
