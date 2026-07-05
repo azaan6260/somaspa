@@ -1055,42 +1055,46 @@ async function saveLogoCache(assets: any) {
       }
     }
 
-    // C. Back up and Update Supabase if configured
+    // C. Back up and Update Supabase if configured (wrapped in try-catch to prevent fatal crashes if tables are not ready)
     if (isSupabaseConfigured && supabase) {
-      const { data: backupRow, error: fetchErr } = await supabase
-        .from("spa_metadata")
-        .select("*")
-        .eq("id", "a55e7100-1090-1090-1090-109010901090")
-        .maybeSingle();
-      
-      if (fetchErr) {
-        console.warn("Could not fetch backup metadata from Supabase:", fetchErr);
-      } else {
-        backupSupabaseData = backupRow;
-      }
-
-      const payload = {
-        id: "a55e7100-1090-1090-1090-109010901090",
-        title: "Soma Brand Assets",
-        tagline: "Custom Brand Logo Assets",
-        description: "Contains custom deployed logos and favicons in all required resolutions",
-        address: "Database",
-        phone: "N/A",
-        email: "N/A",
-        logo_palette: "N/A",
-        hours: processedAssets
-      };
-      
-      const { error: upsertErr } = await supabase
-        .from("spa_metadata")
-        .upsert(payload);
+      try {
+        const { data: backupRow, error: fetchErr } = await supabase
+          .from("spa_metadata")
+          .select("*")
+          .eq("id", "a55e7100-1090-1090-1090-109010901090")
+          .maybeSingle();
         
-      if (upsertErr) {
-        throw new Error(`Supabase logo update failed: ${upsertErr.message}`);
+        if (fetchErr) {
+          console.warn("Could not fetch backup metadata from Supabase:", fetchErr);
+        } else {
+          backupSupabaseData = backupRow;
+        }
+
+        const payload = {
+          id: "a55e7100-1090-1090-1090-109010901090",
+          title: "Soma Brand Assets",
+          tagline: "Custom Brand Logo Assets",
+          description: "Contains custom deployed logos and favicons in all required resolutions",
+          address: "Database",
+          phone: "N/A",
+          email: "N/A",
+          logo_palette: "N/A",
+          hours: processedAssets
+        };
+        
+        const { error: upsertErr } = await supabase
+          .from("spa_metadata")
+          .upsert(payload);
+          
+        if (upsertErr) {
+          console.warn(`Supabase logo update failed (tables might not exist yet): ${upsertErr.message}`);
+        } else {
+          supabaseUpdated = true;
+          console.log("Supabase metadata table updated atomically with brand assets.");
+        }
+      } catch (supabaseErr: any) {
+        console.warn("Graceful fallback: Supabase logo update failed, continuing with local persistence:", supabaseErr);
       }
-      
-      supabaseUpdated = true;
-      console.log("Supabase metadata table updated atomically.");
     }
 
     // D. Update Filesystem Assets (Non-blocking fallback)
