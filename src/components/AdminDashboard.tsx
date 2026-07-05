@@ -257,91 +257,112 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
     faviconSvg: string;
   }> => {
     return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        const width = img.naturalWidth || img.width || 240;
-        const height = img.naturalHeight || img.height || 240;
+      // Find the visual preview image from DOM which has already loaded and is guaranteed to be decoded correctly
+      const previewImg = document.getElementById("brand-cropper-preview-img") as HTMLImageElement;
+      
+      const drawAndResolve = (imgElement: HTMLImageElement) => {
+        try {
+          const width = imgElement.naturalWidth || imgElement.width || 240;
+          const height = imgElement.naturalHeight || imgElement.height || 240;
 
-        const sizes = {
-          logoLarge: 512,
-          logoMedium: 180,
-          logoSmall: 64,
-          favicon32: 32,
-          favicon16: 16
-        };
-        const results: any = {};
-        const VP_SIZE = 240;
-        
-        // Match the layout calculations exactly
-        const baseScale = Math.min(VP_SIZE / width, VP_SIZE / height);
-        const baseWidth = width * baseScale;
-        const baseHeight = height * baseScale;
-        
-        const currentWidth = baseWidth * zoom;
-        const currentHeight = baseHeight * zoom;
-        
-        Object.entries(sizes).forEach(([key, size]) => {
-          const scaleFactor = size / VP_SIZE;
-          
-          // 1. Render PNG with transparent background
-          const pngCanvas = document.createElement("canvas");
-          pngCanvas.width = size;
-          pngCanvas.height = size;
-          const pngCtx = pngCanvas.getContext("2d");
-          
-          if (pngCtx) {
-            const drawWidth = currentWidth * scaleFactor;
-            const drawHeight = currentHeight * scaleFactor;
-            const drawX = (size - drawWidth) / 2 + offset.x * scaleFactor;
-            const drawY = (size - drawHeight) / 2 + offset.y * scaleFactor;
-            
-            // Clear to transparency
-            pngCtx.clearRect(0, 0, size, size);
-            pngCtx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
-            results[key] = pngCanvas.toDataURL("image/png");
-            
-            // WebP supporting transparency
-            if (key === "logoLarge" || key === "logoMedium" || key === "logoSmall") {
-              results[`${key}Webp`] = pngCanvas.toDataURL("image/webp", 0.9);
-            }
+          if (width === 0 || height === 0) {
+            throw new Error("Loaded image has zero dimensions.");
           }
+
+          const sizes = {
+            logoLarge: 512,
+            logoMedium: 180,
+            logoSmall: 64,
+            favicon32: 32,
+            favicon16: 16
+          };
+          const results: any = {};
+          const VP_SIZE = 240;
           
-          // 2. Render JPEG with a white background to prevent transparent areas from turning black
-          if (key === "logoLarge" || key === "logoMedium" || key === "logoSmall") {
-            const jpgCanvas = document.createElement("canvas");
-            jpgCanvas.width = size;
-            jpgCanvas.height = size;
-            const jpgCtx = jpgCanvas.getContext("2d");
+          // Match the layout calculations exactly
+          const baseScale = Math.min(VP_SIZE / width, VP_SIZE / height);
+          const baseWidth = width * baseScale;
+          const baseHeight = height * baseScale;
+          
+          const currentWidth = baseWidth * zoom;
+          const currentHeight = baseHeight * zoom;
+          
+          Object.entries(sizes).forEach(([key, size]) => {
+            const scaleFactor = size / VP_SIZE;
             
-            if (jpgCtx) {
-              jpgCtx.fillStyle = "#FFFFFF";
-              jpgCtx.fillRect(0, 0, size, size);
-              
+            // 1. Render PNG with transparent background
+            const pngCanvas = document.createElement("canvas");
+            pngCanvas.width = size;
+            pngCanvas.height = size;
+            const pngCtx = pngCanvas.getContext("2d");
+            
+            if (pngCtx) {
               const drawWidth = currentWidth * scaleFactor;
               const drawHeight = currentHeight * scaleFactor;
               const drawX = (size - drawWidth) / 2 + offset.x * scaleFactor;
               const drawY = (size - drawHeight) / 2 + offset.y * scaleFactor;
               
-              jpgCtx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
-              results[`${key}Jpg`] = jpgCanvas.toDataURL("image/jpeg", 0.9);
+              // Clear to transparency
+              pngCtx.clearRect(0, 0, size, size);
+              pngCtx.drawImage(imgElement, drawX, drawY, drawWidth, drawHeight);
+              results[key] = pngCanvas.toDataURL("image/png");
+              
+              // WebP supporting transparency
+              if (key === "logoLarge" || key === "logoMedium" || key === "logoSmall") {
+                results[`${key}Webp`] = pngCanvas.toDataURL("image/webp", 0.9);
+              }
             }
-          }
-        });
-        
-        // Wrap the base64 PNG in a valid SVG document for favicon.svg so it renders properly in browsers
-        const svgString = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+            
+            // 2. Render JPEG with a white background to prevent transparent areas from turning black
+            if (key === "logoLarge" || key === "logoMedium" || key === "logoSmall") {
+              const jpgCanvas = document.createElement("canvas");
+              jpgCanvas.width = size;
+              jpgCanvas.height = size;
+              const jpgCtx = jpgCanvas.getContext("2d");
+              
+              if (jpgCtx) {
+                jpgCtx.fillStyle = "#FFFFFF";
+                jpgCtx.fillRect(0, 0, size, size);
+                
+                const drawWidth = currentWidth * scaleFactor;
+                const drawHeight = currentHeight * scaleFactor;
+                const drawX = (size - drawWidth) / 2 + offset.x * scaleFactor;
+                const drawY = (size - drawHeight) / 2 + offset.y * scaleFactor;
+                
+                jpgCtx.drawImage(imgElement, drawX, drawY, drawWidth, drawHeight);
+                results[`${key}Jpg`] = jpgCanvas.toDataURL("image/jpeg", 0.9);
+              }
+            }
+          });
+          
+          // Wrap the base64 PNG in a valid SVG document for favicon.svg so it renders properly in browsers
+          const svgString = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
   <image href="${results.logoSmall}" x="0" y="0" width="100" height="100" />
 </svg>`;
-        
-        resolve({
-          ...results,
-          faviconSvg: svgString
-        });
+          
+          resolve({
+            ...results,
+            faviconSvg: svgString
+          });
+        } catch (err: any) {
+          reject(new Error("Failed to render canvas from crop area: " + err.message));
+        }
       };
-      img.onerror = () => {
-        reject(new Error("Could not load image file. Ensure it is a valid JPEG/PNG."));
-      };
-      img.src = URL.createObjectURL(file);
+
+      if (previewImg && previewImg.complete && previewImg.naturalWidth > 0) {
+        drawAndResolve(previewImg);
+      } else {
+        // Fallback: create off-screen element and load asynchronously
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+          drawAndResolve(img);
+        };
+        img.onerror = () => {
+          reject(new Error("Could not load image file in background. Ensure it is a valid JPEG/PNG."));
+        };
+        img.src = URL.createObjectURL(file);
+      }
     });
   };
 
@@ -2260,6 +2281,7 @@ VALUES (
                         >
                           {logoPreviewUrl && (
                             <img
+                              id="brand-cropper-preview-img"
                               src={logoPreviewUrl}
                               alt="Crop source"
                               onLoad={handleCropperImageLoad}
