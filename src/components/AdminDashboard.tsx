@@ -258,8 +258,10 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
   }> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
-      img.src = URL.createObjectURL(file);
       img.onload = () => {
+        const width = img.naturalWidth || img.width || 240;
+        const height = img.naturalHeight || img.height || 240;
+
         const sizes = {
           logoLarge: 512,
           logoMedium: 180,
@@ -271,9 +273,9 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
         const VP_SIZE = 240;
         
         // Match the layout calculations exactly
-        const baseScale = Math.min(VP_SIZE / img.width, VP_SIZE / img.height);
-        const baseWidth = img.width * baseScale;
-        const baseHeight = img.height * baseScale;
+        const baseScale = Math.min(VP_SIZE / width, VP_SIZE / height);
+        const baseWidth = width * baseScale;
+        const baseHeight = height * baseScale;
         
         const currentWidth = baseWidth * zoom;
         const currentHeight = baseHeight * zoom;
@@ -339,6 +341,7 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
       img.onerror = () => {
         reject(new Error("Could not load image file. Ensure it is a valid JPEG/PNG."));
       };
+      img.src = URL.createObjectURL(file);
     });
   };
 

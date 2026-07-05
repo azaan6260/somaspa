@@ -932,16 +932,19 @@ async function saveLogoCache(assets: any) {
     
     const saveBase64File = (base64Data: string, filename: string) => {
       if (!base64Data) return;
-      const match = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-      if (match) {
-        const buffer = Buffer.from(match[2], "base64");
-        fs.writeFileSync(path.join(assetsDir, filename), buffer);
-      } else if (base64Data.startsWith("data:")) {
-        const parts = base64Data.split(";base64,");
-        if (parts.length === 2) {
-          const buffer = Buffer.from(parts[1], "base64");
+      try {
+        if (base64Data.includes(";base64,")) {
+          const parts = base64Data.split(";base64,");
+          if (parts[1]) {
+            const buffer = Buffer.from(parts[1].trim(), "base64");
+            fs.writeFileSync(path.join(assetsDir, filename), buffer);
+          }
+        } else {
+          const buffer = Buffer.from(base64Data.trim(), "base64");
           fs.writeFileSync(path.join(assetsDir, filename), buffer);
         }
+      } catch (err) {
+        console.error(`Failed to save base64 file ${filename}:`, err);
       }
     };
 
