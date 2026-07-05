@@ -382,9 +382,6 @@ export default function App() {
                 </div>
               </div>
             </div>
-
-            {/* SOMA Design Studio & Downloader */}
-            <LogoStudio />
           </div>
         )}
 
