@@ -491,14 +491,14 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 4: AI ADVISOR */}
+        {/* TAB 4: SOMA SPA AI */}
         {currentTab === "consultant" && (
           <div id="tab-consultant" className="space-y-6 max-w-4xl mx-auto animate-fade-in">
-            <div className="text-center space-y-2 mb-4">
-              <span className="text-xs font-mono tracking-widest text-indigo-600 uppercase font-bold">Interactive Holistic Advisor</span>
-              <h1 className="font-serif text-3xl sm:text-4xl font-semibold text-slate-900">Aura AI Consultant</h1>
-              <p className="text-sm text-slate-600 max-w-xl mx-auto">
-                Aura analyzed SOMA Spa's entire holistic menu. Share your mental exhaustion levels, joint blockages, skin concerns, or Indore work schedules.
+            <div className="text-center space-y-2 mb-4 animate-pulse-slow">
+              <span className="text-xs font-mono tracking-widest text-indigo-600 uppercase font-bold bg-indigo-50 px-3 py-1.5 rounded-full shadow-sm">Official Spa Assistant</span>
+              <h1 className="font-serif text-3xl sm:text-5xl font-extrabold text-slate-900 bg-clip-text text-transparent bg-gradient-to-r from-indigo-900 to-sky-600 mt-2">SOMA SPA AI</h1>
+              <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto leading-relaxed">
+                Your luxury wellness advisor, concierge, and booking assistant. Describe your stress levels, joint stiffness, skin goals, or daily routine. I can instantly recommend the perfect therapy and guide you through scheduling a reservation.
               </p>
             </div>
 
@@ -759,8 +759,14 @@ export default function App() {
             </p>
           </div>
         </div>
-        <div className="max-w-7xl mx-auto pt-6 text-center text-slate-500 text-[10px]">
-          © {new Date().getFullYear()} {metadata?.title || "SOMA Spa"} and Wellness Center. All Rights Reserved.
+        <div className="max-w-7xl mx-auto pt-6 flex flex-col sm:flex-row items-center justify-between text-slate-500 text-[10px] gap-4">
+          <span>© {new Date().getFullYear()} {metadata?.title || "SOMA Spa"} and Wellness Center. All Rights Reserved.</span>
+          <button 
+            onClick={() => setCurrentTab("admin")}
+            className="text-slate-700 hover:text-slate-400 transition-colors cursor-pointer text-[10px] font-mono flex items-center space-x-1"
+          >
+            <span>• Admin Login</span>
+          </button>
         </div>
       </footer>
     </div>

@@ -449,6 +449,41 @@ export const supabaseDb = {
     return mapReviewFromDb(data);
   },
 
+  async updateReview(id: string, rev: Partial<Review>): Promise<Review> {
+    if (!supabase) throw new Error("Supabase is not configured");
+
+    const { data: original, error: fetchErr } = await supabase
+      .from("reviews")
+      .select("*")
+      .eq("id", id)
+      .single();
+    if (fetchErr) throw fetchErr;
+
+    const mappedOriginal = mapReviewFromDb(original);
+    const merged = { ...mappedOriginal, ...rev } as Review;
+    const dbPayload = {
+      name: merged.name,
+      location: merged.location,
+      rating: merged.rating,
+      comment: merged.comment,
+      date: merged.date,
+      service: merged.service
+    };
+
+    const { data, error } = await supabase
+      .from("reviews")
+      .update(dbPayload)
+      .eq("id", id)
+      .select("*")
+      .single();
+
+    if (error) {
+      console.error("Supabase error updating review:", error);
+      throw error;
+    }
+    return mapReviewFromDb(data);
+  },
+
   async deleteReview(id: string): Promise<boolean> {
     if (!supabase) throw new Error("Supabase is not configured");
     const { error } = await supabase

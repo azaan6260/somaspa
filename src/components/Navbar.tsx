@@ -14,9 +14,8 @@ export default function Navbar({ currentTab, setCurrentTab, onOpenQuickBook, log
     { id: "home", label: "Home", icon: Compass },
     { id: "services", label: "Therapies", icon: BookOpen },
     { id: "therapists", label: "Specialists", icon: Users },
-    { id: "consultant", label: "AI Advisor", icon: MessageSquare },
-    { id: "reviews", label: "Reviews", icon: Star },
-    { id: "admin", label: "Admin Portal", icon: ShieldCheck }
+    { id: "consultant", label: "SOMA SPA AI", icon: Sparkles },
+    { id: "reviews", label: "Reviews", icon: Star }
   ];
 
   return (

@@ -23,9 +23,11 @@ import {
   Receipt,
   Printer,
   Download,
-  Ticket
+  Ticket,
+  Star,
+  MessageSquare
 } from "lucide-react";
-import { Employee, Service, Booking, SpaMetadata, OperatingHour, Bill, BillItem } from "../types";
+import { Employee, Service, Booking, SpaMetadata, OperatingHour, Bill, BillItem, Review } from "../types";
 
 interface AdminDashboardProps {
   onRefreshApp: () => void;
@@ -50,7 +52,7 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
   } | null>(null);
 
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "employees" | "services" | "settings" | "leads" | "billing">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "employees" | "services" | "settings" | "leads" | "billing" | "reviews">("overview");
 
   // Billing & Invoices state
   const [bills, setBills] = useState<Bill[]>([]);
@@ -123,6 +125,19 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
   const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
   const [leadNotesText, setLeadNotesText] = useState("");
   const [showSqlSchema, setShowSqlSchema] = useState(false);
+
+  // Reviews state
+  const [reviewsSearch, setReviewsSearch] = useState("");
+  const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [reviewForm, setReviewForm] = useState<Partial<Review>>({
+    name: "",
+    rating: 5,
+    comment: "",
+    service: "",
+    location: "Indore",
+    date: new Date().toISOString().split("T")[0]
+  });
 
   // Logo brand kit state
   const [logoStatus, setLogoStatus] = useState<any>(null);
@@ -840,6 +855,83 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
     }
   };
 
+  // --- Manage Reviews ---
+  const handleReviewFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reviewForm.name || !reviewForm.comment || !reviewForm.service) {
+      showFeedback("error", "Please fill in all required fields (Name, Comment, Service)");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const isEditing = !!editingReviewId;
+      const url = isEditing ? `/api/reviews/${editingReviewId}` : "/api/reviews";
+      const method = isEditing ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reviewForm)
+      });
+
+      if (res.ok) {
+        showFeedback("success", isEditing ? "Review updated successfully!" : "Review created successfully!");
+        setEditingReviewId(null);
+        setShowReviewForm(false);
+        setReviewForm({
+          name: "",
+          rating: 5,
+          comment: "",
+          service: "",
+          location: "Indore",
+          date: new Date().toISOString().split("T")[0]
+        });
+        loadDatabase();
+        onRefreshApp();
+      } else {
+        const errData = await res.json();
+        showFeedback("error", errData.error || "Failed to save review");
+      }
+    } catch (err) {
+      showFeedback("error", "Error connecting to server");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditReviewClick = (rev: Review) => {
+    setEditingReviewId(rev.id);
+    setReviewForm({
+      name: rev.name,
+      rating: rev.rating,
+      comment: rev.comment,
+      service: rev.service,
+      location: rev.location,
+      date: rev.date
+    });
+    setShowReviewForm(true);
+  };
+
+  const handleDeleteReview = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this guest review?")) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/reviews/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        showFeedback("success", "Review deleted successfully!");
+        loadDatabase();
+        onRefreshApp();
+      } else {
+        showFeedback("error", "Failed to delete review");
+      }
+    } catch (err) {
+      showFeedback("error", "Error connecting to server");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Add item to bill form
   const handleAddItemToBill = () => {
     if (!tempSelectedItem.serviceId) {
@@ -1103,7 +1195,8 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
           { id: "services", label: "Spa Service Menu", icon: BookOpen },
           { id: "settings", label: "Timing & Address", icon: MapPin },
           { id: "leads", label: `Leads Inbox (${totalLeads})`, icon: Mail },
-          { id: "billing", label: "Billing & Invoices", icon: Receipt }
+          { id: "billing", label: "Billing & Invoices", icon: Receipt },
+          { id: "reviews", label: `Guest Reviews`, icon: Star }
         ].map((tab) => {
           const Icon = tab.icon;
           const isSelected = activeTab === tab.id;
@@ -3056,6 +3149,251 @@ VALUES (
                                   onClick={() => handleDeleteBill(bill.id)}
                                   className="p-1.5 border border-slate-100 hover:border-red-100 hover:text-red-600 text-slate-400 rounded-lg transition-all cursor-pointer"
                                   title="Void Invoice Record"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 7: GUEST REVIEWS */}
+          {activeTab === "reviews" && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="pb-2 border-b border-slate-100 flex justify-between items-center flex-wrap gap-4">
+                <div>
+                  <h2 className="font-serif text-2xl font-bold text-slate-900">Frontpage Guest Reviews</h2>
+                  <p className="text-xs text-slate-500 mt-1">Directly edit, delete, or create client reviews that appear on the main landing page.</p>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                    <input 
+                      type="text" 
+                      value={reviewsSearch}
+                      onChange={(e) => setReviewsSearch(e.target.value)}
+                      placeholder="Search reviews, names, comments..." 
+                      className="bg-white border border-slate-200 rounded-full pl-10 pr-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none w-52 sm:w-64 font-semibold"
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      setEditingReviewId(null);
+                      setReviewForm({
+                        name: "",
+                        rating: 5,
+                        comment: "",
+                        service: dbState?.services?.[0]?.name || "",
+                        location: "Indore",
+                        date: new Date().toISOString().split("T")[0]
+                      });
+                      setShowReviewForm(true);
+                    }}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full px-4 py-2 text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-sm"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Guest Review</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Review Creator/Editor Form */}
+              {showReviewForm && (
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 shadow-sm animate-scale-up space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-serif font-bold text-slate-800">
+                      {editingReviewId ? "✏️ Edit Guest Review" : "✨ Create New Guest Review"}
+                    </h3>
+                    <button 
+                      onClick={() => {
+                        setShowReviewForm(false);
+                        setEditingReviewId(null);
+                      }}
+                      className="text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleReviewFormSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">Guest Name *</label>
+                      <input 
+                        type="text"
+                        required
+                        value={reviewForm.name || ""}
+                        onChange={(e) => setReviewForm({ ...reviewForm, name: e.target.value })}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                        placeholder="e.g. Priyanshi Sharma"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">Star Rating *</label>
+                      <select
+                        value={reviewForm.rating || 5}
+                        onChange={(e) => setReviewForm({ ...reviewForm, rating: Number(e.target.value) })}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                      >
+                        <option value="5">⭐⭐⭐⭐⭐ (5 Stars)</option>
+                        <option value="4">⭐⭐⭐⭐ (4 Stars)</option>
+                        <option value="3">⭐⭐⭐ (3 Stars)</option>
+                        <option value="2">⭐⭐ (2 Stars)</option>
+                        <option value="1">⭐ (1 Star)</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">Service Discussed *</label>
+                      <select
+                        value={reviewForm.service || ""}
+                        onChange={(e) => setReviewForm({ ...reviewForm, service: e.target.value })}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                      >
+                        <option value="">-- Select Service --</option>
+                        {dbState?.services?.map((s) => (
+                          <option key={s.id} value={s.name}>{s.name}</option>
+                        ))}
+                        <option value="General Spa Experience">General Spa Experience</option>
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">Location</label>
+                        <input 
+                          type="text"
+                          value={reviewForm.location || ""}
+                          onChange={(e) => setReviewForm({ ...reviewForm, location: e.target.value })}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                          placeholder="e.g. Indore"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">Review Date</label>
+                        <input 
+                          type="date"
+                          value={reviewForm.date || ""}
+                          onChange={(e) => setReviewForm({ ...reviewForm, date: e.target.value })}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="md:col-span-2 space-y-1">
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">Comment/Feedback *</label>
+                      <textarea 
+                        required
+                        rows={3}
+                        value={reviewForm.comment || ""}
+                        onChange={(e) => setReviewForm({ ...reviewForm, comment: e.target.value })}
+                        className="w-full bg-white border border-slate-200 rounded-xl p-4 text-xs focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                        placeholder="Write original customer review or edits..."
+                      />
+                    </div>
+
+                    <div className="md:col-span-2 flex justify-end space-x-2 pt-2">
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setShowReviewForm(false);
+                          setEditingReviewId(null);
+                        }}
+                        className="px-4 py-2 border border-slate-200 text-slate-500 rounded-full text-xs font-bold hover:bg-slate-100 transition-all"
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        type="submit"
+                        className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full text-xs font-bold transition-all shadow-sm"
+                      >
+                        {editingReviewId ? "Save Review Edits" : "Publish Review"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {/* Reviews Table and List */}
+              <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-mono text-slate-400 uppercase tracking-widest">
+                      <th className="px-6 py-4 font-semibold">Guest</th>
+                      <th className="px-6 py-4 font-semibold">Rating</th>
+                      <th className="px-6 py-4 font-semibold">Service</th>
+                      <th className="px-6 py-4 font-semibold">Feedback Comment</th>
+                      <th className="px-6 py-4 font-semibold">Date & Place</th>
+                      <th className="px-6 py-4 text-right font-semibold">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50 text-xs text-slate-600">
+                    {!dbState?.reviews || dbState.reviews.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="text-center py-10 font-medium text-slate-400">
+                          No customer reviews found. Create some above!
+                        </td>
+                      </tr>
+                    ) : (
+                      dbState.reviews
+                        .filter((rev) => {
+                          const query = reviewsSearch.toLowerCase().trim();
+                          if (!query) return true;
+                          return (
+                            rev.name.toLowerCase().includes(query) ||
+                            rev.comment.toLowerCase().includes(query) ||
+                            rev.service.toLowerCase().includes(query) ||
+                            rev.location.toLowerCase().includes(query)
+                          );
+                        })
+                        .map((rev) => (
+                          <tr key={rev.id} className="hover:bg-slate-50/20 transition-all">
+                            <td className="px-6 py-4">
+                              <span className="font-serif font-bold text-slate-800 text-sm block leading-tight">{rev.name}</span>
+                              <span className="text-[10px] text-slate-400 font-mono tracking-wider">{rev.id}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex text-amber-500 space-x-0.5">
+                                {Array.from({ length: 5 }).map((_, i) => (
+                                  <Star 
+                                    key={i} 
+                                    className={`w-3.5 h-3.5 ${i < rev.rating ? "fill-amber-400 text-amber-400" : "text-slate-200"}`} 
+                                  />
+                                ))}
+                              </div>
+                              <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">{rev.rating}/5 rating</span>
+                            </td>
+                            <td className="px-6 py-4 font-medium text-slate-700">
+                              <span className="bg-indigo-50/50 border border-indigo-100/30 text-indigo-700 px-2 py-0.5 rounded-full text-[10px] font-semibold">
+                                {rev.service}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 max-w-sm">
+                              <p className="line-clamp-3 text-slate-600 italic">"{rev.comment}"</p>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="block font-medium text-slate-800">{rev.date}</span>
+                              <span className="text-slate-400 text-[10px] block">{rev.location}</span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <div className="flex items-center justify-end space-x-2">
+                                <button 
+                                  onClick={() => handleEditReviewClick(rev)}
+                                  className="p-1.5 border border-slate-100 hover:border-indigo-100 hover:text-indigo-600 text-slate-400 rounded-lg transition-all cursor-pointer"
+                                  title="Edit Review Details & Feedback"
+                                >
+                                  <Edit className="w-3.5 h-3.5" />
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteReview(rev.id)}
+                                  className="p-1.5 border border-slate-100 hover:border-red-100 hover:text-red-600 text-slate-400 rounded-lg transition-all cursor-pointer"
+                                  title="Remove Review"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>

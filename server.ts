@@ -1527,6 +1527,58 @@ app.post("/api/reviews", async (req, res) => {
   }
 });
 
+app.put("/api/reviews/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, rating, comment, service, location, date } = req.body;
+
+    if (isSupabaseConfigured) {
+      const updated = await supabaseDb.updateReview(id, { name, rating: rating ? Number(rating) : undefined, comment, service, location, date });
+      return res.json(updated);
+    } else {
+      db = loadDB();
+      if (!db.reviews) db.reviews = [];
+      const index = db.reviews.findIndex((r: any) => r.id === id);
+      if (index !== -1) {
+        db.reviews[index] = {
+          ...db.reviews[index],
+          name: name ?? db.reviews[index].name,
+          rating: rating !== undefined ? Number(rating) : db.reviews[index].rating,
+          comment: comment ?? db.reviews[index].comment,
+          service: service ?? db.reviews[index].service,
+          location: location ?? db.reviews[index].location,
+          date: date ?? db.reviews[index].date
+        };
+        saveDB(db);
+        return res.json(db.reviews[index]);
+      } else {
+        return res.status(404).json({ error: "Review not found" });
+      }
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to update review" });
+  }
+});
+
+app.delete("/api/reviews/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (isSupabaseConfigured) {
+      await supabaseDb.deleteReview(id);
+      return res.json({ success: true, id });
+    } else {
+      db = loadDB();
+      if (db.reviews) {
+        db.reviews = db.reviews.filter((r: any) => r.id !== id);
+        saveDB(db);
+      }
+      return res.json({ success: true, id });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to delete review" });
+  }
+});
+
 // CRUD - Leads
 app.put("/api/leads/:id", async (req, res) => {
   try {
@@ -1958,9 +2010,13 @@ app.post("/api/consultation", async (req, res) => {
       }).join("\n\n");
     }
 
-    const systemInstruction = `You are "Aura", the lead holistic therapist and wellness advisor at ${metadataTitle} in Indore, India.
-Your tone is deeply calming, warm, welcoming, and knowledgeable about holistic health, traditional Ayurveda, and modern spa therapies.
-You are helping a customer find the perfect treatments, massage techniques, or spa packages based on their wellness goals, stress levels, body aches, skin concerns, or lifestyle (e.g., long desk hours, high-stress jobs).
+    const systemInstruction = `You are "SOMA SPA AI", the elite, premium luxury wellness concierge and booking assistant at ${metadataTitle} in Indore, India.
+Your tone is incredibly polished, warm, welcoming, calm, and deeply knowledgeable about our holistic health therapies, traditional Ayurveda, and modern spa rituals.
+
+You are here to assist the customer with:
+1. Learning about the spa: its signature experience, elegant ambiance, and location in Vijay Nagar, Indore.
+2. Answering questions about our services: dynamically suggested below. Explain durations, pricing, and specific benefits.
+3. Helping them choose and BOOK treatments: Match their symptoms (e.g. stress, body stiffness, exhaustion, city dust skin dullness) to 1 or 2 specific live therapies. Explain why these are perfect. Encourage them to use the interactive booking options.
 
 The current spa details are:
 Name: ${metadataTitle}
@@ -1974,9 +2030,10 @@ ${liveServicesList}
 
 When suggesting treatments:
 - Recommend 1 or 2 specific therapies from the live list above that directly address the user's symptoms or requests. Mention their prices (in Rupees) and durations as listed.
+- Be clear and informative. If they ask about booking or pricing, list the services clearly with bullet points.
 - Explain WHY these therapies will help them (e.g., how the warm oil calms a vata imbalance or how the facial counters Indore's urban dust, heat, and dryness).
-- Incorporate subtle cultural elements of Indore (like recommending a relaxing session after a busy day exploring Chappan Dukan, Sarafa Bazaar, or shopping in Vijay Nagar, or addressing the dry Indore climate).
-- Keep your responses structured, clean, and elegant. Write short paragraphs, use bullet points for suggestions, and encourage them to book a session at our premium Vijay Nagar, Indore center.
+- Incorporate subtle local charm of Indore (e.g., a relaxing escape after visiting Chappan Dukan, Sarafa Bazaar, or shopping in Vijay Nagar, or custom relief from the dry central India climate).
+- Keep your responses structured, clean, and elegant. Write short paragraphs, use bullet points for suggestions, and encourage them to click the direct "Book Now" buttons shown below your messages to secure their desired appointment.
 - Always be professional, compassionate, and focused on wellness. Never give medical advice; if they mention severe pain, gently advise them to consult a medical specialist besides enjoying a relaxing spa treatment.`;
 
     const contents = [];

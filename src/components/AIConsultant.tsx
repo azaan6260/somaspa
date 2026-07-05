@@ -11,7 +11,7 @@ export default function AIConsultant({ onSelectService }: AIConsultantProps) {
     {
       id: "welcome",
       role: "model",
-      text: "Namaste! I am Aura, your wellness advisor at Veda Spa Indore. Tell me how you are feeling today. Are you experiencing stress, desk-bound body aches, exhaustion, or looking for skin rejuvenation? I will customize a holistic treatment package specifically for you.",
+      text: "Welcome to SOMA SPA! I am SOMA SPA AI, your dedicated luxury wellness assistant and booking concierge. \n\nHow can I help you today? You can ask me to: \n• Recommend therapies for stress, joint pain, or skin care.\n• Explain our premium services and custom treatment durations.\n• Guide you directly on how to schedule a booking at our Vijay Nagar, Indore sanctuary.\n\nTell me how your body or mind is feeling today, and I'll find your perfect treatment!",
       timestamp: new Date()
     }
   ]);
@@ -20,10 +20,10 @@ export default function AIConsultant({ onSelectService }: AIConsultantProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const startermessages = [
+    { label: "Book a relaxing massage", text: "I want to schedule a relaxing massage. What services do you offer and how can I book one?" },
     { label: "Neck stiffness from desk work", text: "I work long hours on my desk in Indore and suffer from neck and shoulder stiffness. What do you recommend?" },
-    { label: "Anxious and deeply stressed", text: "I have been feeling highly anxious, sleepless, and stressed out. I need a deeply calming treatment." },
-    { label: "Dull skin & city pollution", text: "Indore's dusty roads and dry climate have made my skin look dull and pigmented. How can I restore my skin's glow?" },
-    { label: "Full-body detox ritual", text: "I'm looking for a premium detox session that cleanses both my body and mind completely." }
+    { label: "Deep anxiety & sleeplessness", text: "I have been feeling highly anxious and stressed out. What deep calming treatments can I book?" },
+    { label: "Dull skin & city pollution", text: "Indore's dusty climate has made my skin look dull. Which glowing skincare session should I book?" }
   ];
 
   // Auto scroll to bottom
@@ -80,7 +80,7 @@ export default function AIConsultant({ onSelectService }: AIConsultantProps) {
       const errorMsg: ChatMessage = {
         id: `msg-${Date.now()}-err`,
         role: "model",
-        text: "My apologies, I had trouble connecting to the wellness engine. Please try asking me again or check out our premium therapist list directly.",
+        text: "My apologies, I had trouble connecting to the SOMA wellness engine. Please try asking me again or check out our premium therapist list directly.",
         timestamp: new Date()
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -94,7 +94,7 @@ export default function AIConsultant({ onSelectService }: AIConsultantProps) {
       {
         id: "welcome",
         role: "model",
-        text: "Namaste! I am Aura, your wellness advisor at Veda Spa Indore. Tell me how you are feeling today. Are you experiencing stress, desk-bound body aches, exhaustion, or looking for skin rejuvenation? I will customize a holistic treatment package specifically for you.",
+        text: "Welcome to SOMA SPA! I am SOMA SPA AI, your dedicated luxury wellness assistant and booking concierge. \n\nHow can I help you today? You can ask me to: \n• Recommend therapies for stress, joint pain, or skin care.\n• Explain our premium services and custom treatment durations.\n• Guide you directly on how to schedule a booking at our Vijay Nagar, Indore sanctuary.\n\nTell me how your body or mind is feeling today, and I'll find your perfect treatment!",
         timestamp: new Date()
       }
     ]);
@@ -147,10 +147,10 @@ export default function AIConsultant({ onSelectService }: AIConsultantProps) {
             <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full" />
           </div>
           <div>
-            <h3 className="font-serif font-semibold text-lg text-slate-900">Aura AI Spa Consultant</h3>
+            <h3 className="font-serif font-semibold text-lg text-slate-900">SOMA SPA AI</h3>
             <div className="flex items-center space-x-1">
               <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />
-              <p className="text-[11px] font-mono tracking-wide text-blue-600 uppercase font-bold">Veda Certified Holistic Guide</p>
+              <p className="text-[11px] font-mono tracking-wide text-blue-600 uppercase font-bold">Official Spa Concierge & Guide</p>
             </div>
           </div>
         </div>
@@ -211,7 +211,7 @@ export default function AIConsultant({ onSelectService }: AIConsultantProps) {
                   <div className="w-2.5 h-2.5 bg-blue-600 rounded-full animate-bounce [animation-delay:-0.15s]" />
                   <div className="w-2.5 h-2.5 bg-blue-600 rounded-full animate-bounce" />
                 </div>
-                <span className="font-mono text-xs italic tracking-wide text-blue-600 font-semibold">Aura is writing recommendations...</span>
+                <span className="font-mono text-xs italic tracking-wide text-blue-600 font-semibold">SOMA SPA AI is writing...</span>
               </div>
             </div>
           </div>
@@ -223,7 +223,7 @@ export default function AIConsultant({ onSelectService }: AIConsultantProps) {
       {/* Starter Suggestions */}
       {messages.length === 1 && (
         <div className="px-6 py-4 bg-slate-50 border-t border-blue-100">
-          <p className="text-[11px] font-mono uppercase tracking-wider text-blue-600 mb-2 font-bold">Suggested questions for Aura Advisor:</p>
+          <p className="text-[11px] font-mono uppercase tracking-wider text-blue-600 mb-2 font-bold">Suggested questions for SOMA SPA AI:</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {startermessages.map((sm, index) => (
               <button
