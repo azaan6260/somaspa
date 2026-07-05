@@ -1,4 +1,4 @@
-import { Sparkles, Calendar, BookOpen, MessageSquare, Users, Star, Compass, ShieldCheck } from "lucide-react";
+import { Sparkles, Calendar, BookOpen, MessageSquare, Users, Star, Compass, ShieldCheck, User } from "lucide-react";
 import { SomaLogo } from "./SomaLogo";
 
 interface NavbarProps {
@@ -15,7 +15,8 @@ export default function Navbar({ currentTab, setCurrentTab, onOpenQuickBook, log
     { id: "services", label: "Therapies", icon: BookOpen },
     { id: "therapists", label: "Specialists", icon: Users },
     { id: "consultant", label: "SOMA SPA AI", icon: Sparkles },
-    { id: "reviews", label: "Reviews", icon: Star }
+    { id: "reviews", label: "Reviews", icon: Star },
+    { id: "portal", label: "My Account", icon: User }
   ];
 
   return (

@@ -70,7 +70,9 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
     discount: 0,
     tax: 0,
     paymentMethod: "Cash" as "Cash" | "UPI" | "Card" | "Net Banking",
-    status: "Paid" as "Paid" | "Pending"
+    status: "Paid" as "Paid" | "Pending",
+    createBooking: false,
+    bookingTime: "11:00 AM"
   });
   const [tempSelectedItem, setTempSelectedItem] = useState({
     serviceId: "",
@@ -1015,7 +1017,31 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
 
       if (res.ok) {
         const createdBill = await res.json();
-        showFeedback("success", "Invoice generated successfully");
+
+        // If "Create Booking" option is enabled, instantly book the session in booking ledger too
+        if (billForm.createBooking) {
+          try {
+            await fetch("/api/bookings", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: billForm.customerName,
+                email: billForm.customerEmail || "",
+                phone: billForm.customerPhone,
+                service: billForm.items[0]?.serviceName || "Spa Treatment",
+                date: billForm.date,
+                time: billForm.bookingTime || "11:00 AM",
+                therapist: tName || "Any Specialist",
+                notes: `Instantly settled via POS (Invoice ID: ${createdBill.id})`,
+                status: "Confirmed"
+              })
+            });
+          } catch (bkErr) {
+            console.error("Error creating POS booking reservation:", bkErr);
+          }
+        }
+
+        showFeedback("success", billForm.createBooking ? "POS Action: Booking registered and settled!" : "Invoice generated successfully");
         // Update local state
         await fetchBills();
         // Open the generated invoice details for viewing/printing!
@@ -1032,7 +1058,9 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
           discount: 0,
           tax: 0,
           paymentMethod: "Cash",
-          status: "Paid"
+          status: "Paid",
+          createBooking: false,
+          bookingTime: "11:00 AM"
         });
         setShowBillForm(false);
       } else {
@@ -2803,7 +2831,9 @@ VALUES (
                         discount: 0,
                         tax: 0,
                         paymentMethod: "Cash",
-                        status: "Paid"
+                        status: "Paid",
+                        createBooking: false,
+                        bookingTime: "11:00 AM"
                       });
                     }}
                     className="bg-gradient-to-r from-indigo-600 to-sky-500 hover:from-indigo-500 hover:to-sky-400 text-white rounded-full px-4 py-2 text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-sm"
@@ -2873,6 +2903,37 @@ VALUES (
                               className="w-full bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs font-semibold"
                             />
                           </div>
+                        </div>
+
+                        {/* POS Automatic Booking Options */}
+                        <div className="pt-3 mt-3 border-t border-slate-200/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                          <label className="flex items-center space-x-2.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={billForm.createBooking}
+                              onChange={(e) => setBillForm({ ...billForm, createBooking: e.target.checked })}
+                              className="w-4 h-4 rounded text-indigo-600 border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                            />
+                            <div>
+                              <span className="block text-xs font-bold text-slate-800">Add reservation to booking ledger too</span>
+                              <span className="block text-[10px] text-slate-400">Instantly register this self-care appointment on the client's timeline</span>
+                            </div>
+                          </label>
+
+                          {billForm.createBooking && (
+                            <div className="w-full sm:w-44 animate-fade-in">
+                              <label className="block text-[9px] font-mono tracking-wider font-bold text-slate-400 uppercase mb-1">Session Slot Time</label>
+                              <select
+                                value={billForm.bookingTime}
+                                onChange={(e) => setBillForm({ ...billForm, bookingTime: e.target.value })}
+                                className="w-full bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-xl px-3 py-1.5 text-xs text-slate-800 font-semibold"
+                              >
+                                {["08:00 AM", "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM", "07:00 PM", "08:00 PM", "09:00 PM"].map((t) => (
+                                  <option key={t} value={t}>{t}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
                         </div>
                       </div>
 

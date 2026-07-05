@@ -23,7 +23,15 @@ import {
   Plus,
   Compass,
   ArrowRight,
-  BookmarkCheck
+  BookmarkCheck,
+  User,
+  LogOut,
+  Receipt,
+  CheckCircle,
+  Printer,
+  X,
+  FileText,
+  Check
 } from "lucide-react";
 
 export default function App() {
@@ -35,6 +43,20 @@ export default function App() {
   const [reviewsList, setReviewsList] = useState<Review[]>(REVIEWS);
   const [showAddReview, setShowAddReview] = useState(false);
   const [reviewSuccess, setReviewSuccess] = useState(false);
+
+  // Customer Portal & Invoices Session
+  const [bills, setBills] = useState<any[]>([]);
+  const [customerSession, setCustomerSession] = useState<{ name: string; email: string; phone: string } | null>(() => {
+    try {
+      const saved = localStorage.getItem("soma_customer_session");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [loginForm, setLoginForm] = useState({ name: "", email: "", phone: "" });
+  const [selectedCustomerBill, setSelectedCustomerBill] = useState<any | null>(null);
+  const [loginError, setLoginError] = useState("");
 
   // Dynamic server-side DB state
   const [services, setServices] = useState<Service[]>(SERVICES);
@@ -106,10 +128,23 @@ export default function App() {
     }
   };
 
+  const fetchBills = async () => {
+    try {
+      const res = await fetch("/api/bills");
+      if (res.ok) {
+        const data = await res.json();
+        setBills(data);
+      }
+    } catch (err) {
+      console.error("Error fetching bills in parent App:", err);
+    }
+  };
+
   useEffect(() => {
     fetchDbState();
     fetchBookings();
     fetchLogoStatus();
+    fetchBills();
   }, []);
 
   useEffect(() => {
@@ -132,6 +167,63 @@ export default function App() {
 
   const handleBookingSuccess = () => {
     fetchBookings(); // Refresh bookings list
+    fetchBills(); // Refresh bills
+  };
+
+  const handleCustomerLogin = (e: FormEvent) => {
+    e.preventDefault();
+    setLoginError("");
+
+    const phoneInput = loginForm.phone.trim();
+    const emailInput = loginForm.email.trim().toLowerCase();
+
+    if (!phoneInput && !emailInput) {
+      setLoginError("Please provide at least a Phone Number or Email Address to access your guest card.");
+      return;
+    }
+
+    let matchedName = loginForm.name.trim();
+
+    const matchedBooking = bookings.find(
+      (b) => 
+        (phoneInput && b.phone.includes(phoneInput)) || 
+        (emailInput && b.email.toLowerCase() === emailInput)
+    );
+
+    const matchedBill = bills.find(
+      (bi) => 
+        (phoneInput && bi.customerPhone.includes(phoneInput)) || 
+        (emailInput && bi.customerEmail?.toLowerCase() === emailInput)
+    );
+
+    if (matchedBooking) {
+      matchedName = matchedBooking.name;
+    } else if (matchedBill) {
+      matchedName = matchedBill.customerName;
+    }
+
+    if (!matchedName) {
+      if (!loginForm.name.trim()) {
+        setLoginError("We couldn't find an existing client card with these details. Please enter your name below to register and access your customer portal.");
+        return;
+      }
+      matchedName = loginForm.name.trim();
+    }
+
+    const session = {
+      name: matchedName,
+      email: emailInput || (matchedBooking?.email || matchedBill?.customerEmail || ""),
+      phone: phoneInput || (matchedBooking?.phone || matchedBill?.customerPhone || "")
+    };
+
+    setCustomerSession(session);
+    localStorage.setItem("soma_customer_session", JSON.stringify(session));
+  };
+
+  const handleCustomerLogout = () => {
+    setCustomerSession(null);
+    localStorage.removeItem("soma_customer_session");
+    setLoginForm({ name: "", email: "", phone: "" });
   };
 
   // Filtered services based on dynamic services state
@@ -641,64 +733,321 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 6: ADMIN PORTAL */}
+        {/* TAB 6: CUSTOMER PORTAL & INVOICES */}
+        {currentTab === "portal" && (
+          <div id="tab-portal" className="space-y-8 animate-fade-in max-w-5xl mx-auto px-4 sm:px-0">
+            {!customerSession ? (
+              <div className="max-w-md mx-auto bg-white border border-indigo-100 rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-500 to-sky-400" />
+                
+                <div className="text-center space-y-2 mb-6">
+                  <div className="w-12 h-12 bg-indigo-50 rounded-full flex items-center justify-center mx-auto text-indigo-600">
+                    <User className="w-6 h-6" />
+                  </div>
+                  <h2 className="font-serif text-2xl font-bold text-slate-900">Soma Guest Portal</h2>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+                    Access your active ayurvedic reservations, self-care session logs, and printable GST invoices.
+                  </p>
+                </div>
+
+                {loginError && (
+                  <div className="p-3.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl text-[11px] font-medium leading-relaxed flex items-start space-x-2 mb-4">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <span>{loginError}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleCustomerLogin} className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-mono tracking-wider text-slate-400 uppercase font-bold">Mobile Number</label>
+                    <input 
+                      type="tel"
+                      value={loginForm.phone}
+                      onChange={(e) => setLoginForm({ ...loginForm, phone: e.target.value })}
+                      placeholder="e.g. 9823456780"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-indigo-500 text-slate-800 font-semibold"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-mono tracking-wider text-slate-400 uppercase font-bold">Email Address</label>
+                    <input 
+                      type="email"
+                      value={loginForm.email}
+                      onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                      placeholder="e.g. guest@indore.com"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-indigo-500 text-slate-800 font-semibold"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-mono tracking-wider text-slate-400 uppercase font-bold">Full Name (New Guests Only)</label>
+                    <input 
+                      type="text"
+                      value={loginForm.name}
+                      onChange={(e) => setLoginForm({ ...loginForm, name: e.target.value })}
+                      placeholder="e.g. Priyanshi Sharma"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-indigo-500 text-slate-800 font-semibold"
+                    />
+                  </div>
+
+                  <button 
+                    type="submit"
+                    className="w-full py-3 bg-gradient-to-r from-indigo-600 to-sky-500 hover:from-indigo-500 hover:to-sky-400 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-300 shadow-md shadow-indigo-500/10 cursor-pointer"
+                  >
+                    Authenticate & Access
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <div className="space-y-8 animate-fade-in">
+                {/* Guest Profile Header Card */}
+                <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-3xl p-6 sm:p-8 relative overflow-hidden shadow-xl">
+                  <div className="absolute -right-10 -top-10 w-44 h-44 bg-amber-400/10 rounded-full blur-3xl pointer-events-none" />
+                  
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative z-10">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-14 h-14 bg-white/10 rounded-full flex items-center justify-center border border-white/15">
+                        <User className="w-6 h-6 text-amber-400" />
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <h2 className="font-serif text-2xl font-bold tracking-wide text-white">{customerSession.name}</h2>
+                          <span className="bg-amber-400/20 text-amber-300 border border-amber-400/30 rounded-full px-2.5 py-0.5 text-[10px] font-mono font-bold uppercase tracking-wider">Guest Elite</span>
+                        </div>
+                        <p className="text-xs text-indigo-200 font-mono tracking-wide mt-1">
+                          {customerSession.phone} {customerSession.email ? `• ${customerSession.email}` : ""}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button 
+                      onClick={handleCustomerLogout}
+                      className="bg-white/10 hover:bg-white/20 text-indigo-100 px-4 py-2 rounded-xl text-xs font-bold transition-all border border-white/15 flex items-center space-x-1.5 cursor-pointer"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 pt-6 border-t border-white/10 text-xs">
+                    <div>
+                      <span className="block text-indigo-300 font-mono text-[9px] uppercase tracking-wider">Total Spa Visits</span>
+                      <strong className="block text-lg font-serif mt-1 text-white font-bold">
+                        {bills.filter(b => b.customerPhone === customerSession.phone || (customerSession.email && b.customerEmail?.toLowerCase() === customerSession.email.toLowerCase())).length} sessions
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="block text-indigo-300 font-mono text-[9px] uppercase tracking-wider">Wellness Investment</span>
+                      <strong className="block text-lg font-serif mt-1 text-amber-400 font-bold">
+                        ₹{bills.filter(b => b.customerPhone === customerSession.phone || (customerSession.email && b.customerEmail?.toLowerCase() === customerSession.email.toLowerCase())).reduce((sum, b) => sum + b.total, 0).toLocaleString("en-IN")}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="block text-indigo-300 font-mono text-[9px] uppercase tracking-wider">Upcoming Bookings</span>
+                      <strong className="block text-lg font-serif mt-1 text-white font-bold">
+                        {bookings.filter(b => b.phone === customerSession.phone || (customerSession.email && b.email.toLowerCase() === customerSession.email.toLowerCase())).length} active
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="block text-indigo-300 font-mono text-[9px] uppercase tracking-wider">Preferred Specialist</span>
+                      <strong className="block text-lg font-serif mt-1 text-indigo-200 font-bold">
+                        {(() => {
+                          const myBills = bills.filter(b => b.customerPhone === customerSession.phone || (customerSession.email && b.customerEmail?.toLowerCase() === customerSession.email.toLowerCase()));
+                          const therapistsMap: { [key: string]: number } = {};
+                          myBills.forEach(b => {
+                            if (b.therapistName) {
+                              therapistsMap[b.therapistName] = (therapistsMap[b.therapistName] || 0) + 1;
+                            }
+                          });
+                          let pref = "Any Specialist";
+                          let max = 0;
+                          Object.entries(therapistsMap).forEach(([name, count]) => {
+                            if (count > max) {
+                              max = count;
+                              pref = name;
+                            }
+                          });
+                          return pref;
+                        })()}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* COLUMN A: ACTIVE BOOKINGS */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="w-5 h-5 text-indigo-600" />
+                        <h3 className="font-serif text-lg font-bold text-slate-900">Active Reservations</h3>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          setPreselectedService("");
+                          setShowBookingModal(true);
+                        }}
+                        className="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-bold rounded-lg px-3 py-1.5 transition-all cursor-pointer"
+                      >
+                        Book Another Session
+                      </button>
+                    </div>
+
+                    {(() => {
+                      const myBookings = bookings.filter(
+                        (b) => 
+                          b.phone === customerSession.phone || 
+                          (customerSession.email && b.email.toLowerCase() === customerSession.email.toLowerCase())
+                      );
+                      
+                      if (myBookings.length === 0) {
+                        return (
+                          <div className="bg-white border border-dashed border-indigo-100 rounded-3xl p-8 text-center space-y-3">
+                            <p className="text-slate-500 text-xs">You have no upcoming active bookings on file.</p>
+                            <button
+                              onClick={() => setShowBookingModal(true)}
+                              className="bg-gradient-to-r from-indigo-600 to-sky-500 text-white rounded-full px-5 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                            >
+                              Schedule Your Care Now
+                            </button>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="space-y-4">
+                          {myBookings.map((bk) => (
+                            <div 
+                              key={bk.id}
+                              className="bg-white border border-indigo-100/60 rounded-2xl p-5 shadow-sm space-y-3 relative overflow-hidden"
+                            >
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <span className="text-[9px] font-mono tracking-wider text-slate-400 font-bold uppercase">{bk.id}</span>
+                                  <h4 className="font-serif font-bold text-slate-800 text-base">{bk.service}</h4>
+                                </div>
+                                <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
+                                  bk.status === "Pending" 
+                                    ? "bg-amber-50 text-amber-700 border-amber-200" 
+                                    : "bg-green-50 text-green-700 border-green-200"
+                                }`}>
+                                  {bk.status || "Confirmed"}
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 pt-1">
+                                <p>Specialist: <strong className="text-slate-800">{bk.therapist}</strong></p>
+                                <p>Date: <strong className="text-slate-800">{bk.date}</strong></p>
+                                <p>Time: <strong className="text-slate-800">{bk.time}</strong></p>
+                                <p>Guest Name: <strong className="text-slate-800">{bk.name}</strong></p>
+                              </div>
+
+                              {bk.notes && (
+                                <p className="text-[11px] text-slate-500 italic mt-2.5 border-t border-slate-100 pt-2.5">
+                                  Request: "{bk.notes}"
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* COLUMN B: TREATMENT HISTORY & TAX INVOICES */}
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-2">
+                      <Receipt className="w-5 h-5 text-indigo-600" />
+                      <h3 className="font-serif text-lg font-bold text-slate-900">Invoices & Treatment History</h3>
+                    </div>
+
+                    {(() => {
+                      const myBills = bills.filter(
+                        (b) => 
+                          b.customerPhone === customerSession.phone || 
+                          (customerSession.email && b.customerEmail?.toLowerCase() === customerSession.email.toLowerCase())
+                      );
+
+                      if (myBills.length === 0) {
+                        return (
+                          <div className="bg-white border border-dashed border-indigo-100 rounded-3xl p-8 text-center text-slate-500 text-xs">
+                            No past billing invoices recorded on this mobile/email. Past service files will automatically index here.
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="bg-white border border-indigo-100/50 rounded-2xl overflow-hidden shadow-sm">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead>
+                              <tr className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-mono text-slate-400 uppercase tracking-widest">
+                                <th className="p-4">Date & ID</th>
+                                <th className="p-4">Treatments</th>
+                                <th className="p-4 text-right">Paid</th>
+                                <th className="p-4 text-right">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                              {myBills.map((b) => (
+                                <tr key={b.id} className="hover:bg-slate-50/20 transition-all">
+                                  <td className="p-4">
+                                    <span className="font-bold text-slate-800 block">{b.date}</span>
+                                    <span className="text-[10px] text-slate-400 font-mono">{b.id}</span>
+                                  </td>
+                                  <td className="p-4">
+                                    <div className="space-y-0.5">
+                                      {b.items.map((it: any, idx: number) => (
+                                        <p key={idx} className="font-medium text-slate-700">
+                                          {it.serviceName} <span className="text-slate-400 text-[10px]">x{it.qty}</span>
+                                        </p>
+                                      ))}
+                                      {b.therapistName && (
+                                        <p className="text-[10px] text-indigo-500">Therapist: {b.therapistName}</p>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="p-4 text-right">
+                                    <span className="font-bold text-slate-900 block">₹{b.total.toLocaleString("en-IN")}</span>
+                                    <span className="text-[9px] text-green-600 bg-green-50 border border-green-200 rounded px-1 text-center font-bold">
+                                      {b.status}
+                                    </span>
+                                  </td>
+                                  <td className="p-4 text-right">
+                                    <button 
+                                      onClick={() => setSelectedCustomerBill(b)}
+                                      className="text-indigo-600 hover:text-indigo-800 font-bold hover:underline inline-flex items-center space-x-1 cursor-pointer text-xs"
+                                    >
+                                      <FileText className="w-3.5 h-3.5" />
+                                      <span>Tax Invoice</span>
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 7: ADMIN PORTAL */}
         {currentTab === "admin" && (
           <div id="tab-admin" className="space-y-6 animate-fade-in">
             <AdminDashboard 
               onRefreshApp={() => {
                 fetchDbState();
                 fetchLogoStatus();
+                fetchBills();
+                fetchBookings();
               }} 
               logoPalette={metadata?.logoPalette || "sunset-gold"} 
             />
-          </div>
-        )}
-
-        {/* Up-coming Active Bookings Section (Loaded Live from /api/bookings) */}
-        {bookings.length > 0 && (
-          <div id="active-bookings" className="mt-16 bg-white border border-indigo-100/70 rounded-3xl p-6 sm:p-8 space-y-6 shadow-sm animate-fade-in">
-            <div className="flex items-center space-x-3">
-              <BookmarkCheck className="w-6 h-6 text-indigo-600" />
-              <div>
-                <h3 className="font-serif text-xl font-semibold text-slate-900">Your Scheduled Sessions</h3>
-                <p className="text-xs text-slate-500 font-mono uppercase tracking-wide">Live database status</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {bookings.map((bk) => (
-                <div 
-                  key={bk.id}
-                  className="bg-slate-50/50 border border-indigo-100/50 rounded-2xl p-5 flex flex-col justify-between"
-                >
-                  <div>
-                    <div className="flex justify-between items-start mb-2">
-                      <span className="text-[10px] font-mono tracking-widest text-indigo-600 uppercase font-bold">
-                        {bk.id}
-                      </span>
-                      <span className="bg-green-50 text-green-700 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-green-200">
-                        {bk.status}
-                      </span>
-                    </div>
-
-                    <h4 className="font-serif font-semibold text-slate-900">{bk.service}</h4>
-                    
-                    <div className="grid grid-cols-2 gap-2 mt-3 text-xs text-slate-600">
-                      <p>Guest: <strong className="text-slate-800">{bk.name}</strong></p>
-                      <p>Therapist: <strong className="text-slate-800">{bk.therapist}</strong></p>
-                      <p>Date: <strong className="text-slate-800">{bk.date}</strong></p>
-                      <p>Time: <strong className="text-slate-800">{bk.time}</strong></p>
-                    </div>
-
-                    {bk.notes && (
-                      <p className="text-[11px] text-slate-500 italic mt-2.5 border-t border-slate-200 pt-2.5">
-                        Notes: "{bk.notes}"
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
         )}
       </main>
@@ -723,6 +1072,135 @@ export default function App() {
         onBookingSuccess={handleBookingSuccess}
         customLogoUrl={customLogoUrl}
       />
+
+      {/* PRINTABLE CUSTOMER TAX INVOICE DETAIL MODAL */}
+      {selectedCustomerBill && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/65 backdrop-blur-md animate-fade-in print:bg-white print:p-0">
+          <div className="bg-white border border-indigo-100 rounded-3xl w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl relative animate-scale-up p-8 flex flex-col justify-between print:border-none print:shadow-none print:max-h-full print:overflow-visible">
+            {/* Modal close icon (hidden on print) */}
+            <button
+              onClick={() => setSelectedCustomerBill(null)}
+              className="absolute top-4 right-4 bg-slate-50 hover:bg-slate-200 p-2 rounded-full text-slate-700 border border-slate-100 transition-colors print:hidden"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Receipt Wrapper (targeting for print) */}
+            <div id="printable-spa-invoice" className="font-sans text-slate-800 space-y-6">
+              {/* Spa Header */}
+              <div className="text-center pb-6 border-b border-dashed border-slate-200 space-y-2">
+                <div className="flex justify-center items-center space-x-2">
+                  <span className="font-serif font-bold text-2xl tracking-widest text-slate-900 uppercase">SOMA SPA</span>
+                </div>
+                <p className="text-[10px] font-mono tracking-widest text-indigo-600 uppercase font-bold">Spa & Wellness Centre</p>
+                <p className="text-[11px] text-slate-500 max-w-xs mx-auto leading-relaxed">
+                  19 GH, Mittal Kachori building, Scheme 54, Vijay nagar, Indore 452010 | +91 89823 71810
+                </p>
+              </div>
+
+              {/* Metadata coordinates */}
+              <div className="grid grid-cols-2 gap-4 text-xs">
+                <div className="space-y-1">
+                  <p className="font-mono text-[9px] text-slate-400 uppercase tracking-widest">Invoiced Guest</p>
+                  <p className="font-serif font-bold text-slate-900 text-sm leading-tight">{selectedCustomerBill.customerName}</p>
+                  <p className="text-slate-600 font-medium">{selectedCustomerBill.customerPhone}</p>
+                  {selectedCustomerBill.customerEmail && <p className="text-slate-500">{selectedCustomerBill.customerEmail}</p>}
+                </div>
+                <div className="text-right space-y-1">
+                  <p className="font-mono text-[9px] text-slate-400 uppercase tracking-widest">Receipt Summary</p>
+                  <p className="font-mono font-bold text-slate-800">{selectedCustomerBill.id}</p>
+                  <p className="text-slate-600 font-semibold">Date: {selectedCustomerBill.date}</p>
+                  <p className="text-slate-500 font-medium">Method: {selectedCustomerBill.paymentMethod}</p>
+                </div>
+              </div>
+
+              {/* Staff attending */}
+              {selectedCustomerBill.therapistName && (
+                <div className="bg-slate-50 border border-slate-100/50 rounded-xl px-4 py-2 text-xs flex justify-between items-center">
+                  <span className="text-slate-500 font-semibold">Attending Specialist:</span>
+                  <span className="font-serif font-bold text-slate-800">{selectedCustomerBill.therapistName}</span>
+                </div>
+              )}
+
+              {/* Services List Table */}
+              <div className="space-y-2">
+                <p className="font-mono text-[9px] text-slate-400 uppercase tracking-widest mb-1.5 font-bold">Therapeutic Treatments Rendered</p>
+                <div className="border border-slate-100 rounded-xl overflow-hidden bg-slate-50/20 text-xs">
+                  <div className="grid grid-cols-12 gap-2 bg-slate-50 px-4 py-2 font-mono font-bold text-slate-500 border-b border-slate-100 uppercase text-[10px]">
+                    <span className="col-span-6">Treatment</span>
+                    <span className="col-span-2 text-right">Price</span>
+                    <span className="col-span-2 text-center">Qty</span>
+                    <span className="col-span-2 text-right font-bold">Total</span>
+                  </div>
+                  <div className="divide-y divide-slate-100 px-4">
+                    {selectedCustomerBill.items.map((item: any, idx: number) => (
+                      <div key={idx} className="grid grid-cols-12 gap-2 py-3">
+                        <span className="col-span-6 font-semibold text-slate-800">{item.serviceName}</span>
+                        <span className="col-span-2 text-right text-slate-500 font-mono">₹{item.price}</span>
+                        <span className="col-span-2 text-center text-slate-800 font-bold font-mono">{item.qty}</span>
+                        <span className="col-span-2 text-right font-bold text-slate-900 font-mono">₹{item.price * item.qty}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Calculation Summary */}
+              <div className="pt-4 border-t border-slate-200 text-xs flex flex-col items-end space-y-1.5">
+                <div className="flex justify-between w-full max-w-[240px]">
+                  <span className="text-slate-500">Subtotal:</span>
+                  <span className="font-bold text-slate-800 font-mono">₹{selectedCustomerBill.subtotal}</span>
+                </div>
+                {selectedCustomerBill.discount > 0 && (
+                  <div className="flex justify-between w-full max-w-[240px] text-red-600 font-semibold">
+                    <span>Discount applied:</span>
+                    <span className="font-mono">-₹{selectedCustomerBill.discount}</span>
+                  </div>
+                )}
+                {selectedCustomerBill.tax > 0 && (
+                  <div className="flex justify-between w-full max-w-[240px]">
+                    <span className="text-slate-500">Taxes & CGST:</span>
+                    <span className="font-bold text-slate-800 font-mono">₹{selectedCustomerBill.tax}</span>
+                  </div>
+                )}
+                <div className="flex justify-between w-full max-w-[240px] pt-2 border-t border-dashed border-slate-300 text-sm">
+                  <span className="font-serif font-bold text-slate-900">Total Paid:</span>
+                  <span className="font-serif font-extrabold text-indigo-700 text-base font-mono">
+                    ₹{selectedCustomerBill.total.toLocaleString("en-IN")}
+                  </span>
+                </div>
+              </div>
+
+              {/* Centered Seal of authenticity */}
+              <div className="text-center pt-6 pb-2 space-y-2 border-t border-dashed border-slate-200">
+                <p className="text-[10px] text-slate-400 leading-relaxed max-w-xs mx-auto italic">
+                  Thank you for prioritizing your self-care with Soma. Your support aids traditional ayurvedic therapist ecosystems in Indore.
+                </p>
+                <span className="inline-block border border-green-500/35 bg-green-50 text-green-700 text-[9px] font-mono uppercase tracking-widest font-bold px-3 py-1 rounded-full">
+                  • PAID TAX INVOICE •
+                </span>
+              </div>
+            </div>
+
+            {/* Actions Footer */}
+            <div className="flex items-center space-x-3 mt-6 pt-6 border-t border-slate-100 print:hidden">
+              <button
+                onClick={() => window.print()}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-3 text-xs font-bold transition-all flex items-center justify-center space-x-2 shadow-md cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Print Official Receipt</span>
+              </button>
+              <button
+                onClick={() => setSelectedCustomerBill(null)}
+                className="px-6 py-3 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-bold transition-all cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Styled Footer */}
       <footer className="mt-12 bg-slate-950 text-slate-200 py-12 px-4 border-t border-slate-800 font-mono text-xs">
