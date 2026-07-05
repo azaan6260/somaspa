@@ -129,6 +129,11 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
   const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const [processingLogo, setProcessingLogo] = useState(false);
+  const [cropZoom, setCropZoom] = useState(1.0);
+  const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 });
+  const [isDraggingLogo, setIsDraggingLogo] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [imgDims, setImgDims] = useState<{ width: number; height: number } | null>(null);
 
   const fetchLogoStatus = async () => {
     try {
@@ -155,10 +160,89 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
       }
       setSelectedLogoFile(file);
       setLogoPreviewUrl(URL.createObjectURL(file));
+      setCropZoom(1.0);
+      setCropOffset({ x: 0, y: 0 });
+      setImgDims(null);
     }
   };
 
-  const processImageToSizes = (file: File): Promise<{
+  const handleCropperImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const { naturalWidth, naturalHeight } = e.currentTarget;
+    setImgDims({ width: naturalWidth, height: naturalHeight });
+    setCropZoom(1.0);
+    setCropOffset({ x: 0, y: 0 });
+  };
+
+  const handleLogoMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingLogo(true);
+    setDragStart({
+      x: e.clientX - cropOffset.x,
+      y: e.clientY - cropOffset.y
+    });
+  };
+
+  const handleLogoMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDraggingLogo) return;
+    setCropOffset({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y
+    });
+  };
+
+  const handleLogoMouseUp = () => {
+    setIsDraggingLogo(false);
+  };
+
+  const handleLogoTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 1) {
+      setIsDraggingLogo(true);
+      setDragStart({
+        x: e.touches[0].clientX - cropOffset.x,
+        y: e.touches[0].clientY - cropOffset.y
+      });
+    }
+  };
+
+  const handleLogoTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isDraggingLogo || e.touches.length !== 1) return;
+    setCropOffset({
+      x: e.touches[0].clientX - dragStart.x,
+      y: e.touches[0].clientY - dragStart.y
+    });
+  };
+
+  const getCropperImageStyle = () => {
+    if (!imgDims) return { display: "none" };
+    
+    const VP_SIZE = 240;
+    const baseScale = Math.min(VP_SIZE / imgDims.width, VP_SIZE / imgDims.height);
+    const baseWidth = imgDims.width * baseScale;
+    const baseHeight = imgDims.height * baseScale;
+    
+    const currentWidth = baseWidth * cropZoom;
+    const currentHeight = baseHeight * cropZoom;
+    
+    const left = (VP_SIZE - currentWidth) / 2 + cropOffset.x;
+    const top = (VP_SIZE - currentHeight) / 2 + cropOffset.y;
+    
+    return {
+      width: `${currentWidth}px`,
+      height: `${currentHeight}px`,
+      left: `${left}px`,
+      top: `${top}px`,
+      position: "absolute" as const,
+      maxWidth: "none",
+      maxHeight: "none",
+      pointerEvents: "none" as const
+    };
+  };
+
+  const processImageToSizes = (
+    file: File,
+    zoom: number,
+    offset: { x: number; y: number }
+  ): Promise<{
     logoLarge: string;
     logoMedium: string;
     logoSmall: string;
@@ -184,8 +268,19 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
           favicon16: 16
         };
         const results: any = {};
+        const VP_SIZE = 240;
+        
+        // Match the layout calculations exactly
+        const baseScale = Math.min(VP_SIZE / img.width, VP_SIZE / img.height);
+        const baseWidth = img.width * baseScale;
+        const baseHeight = img.height * baseScale;
+        
+        const currentWidth = baseWidth * zoom;
+        const currentHeight = baseHeight * zoom;
         
         Object.entries(sizes).forEach(([key, size]) => {
+          const scaleFactor = size / VP_SIZE;
+          
           // 1. Render PNG with transparent background
           const pngCanvas = document.createElement("canvas");
           pngCanvas.width = size;
@@ -193,14 +288,14 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
           const pngCtx = pngCanvas.getContext("2d");
           
           if (pngCtx) {
-            // Using "Contain" fit to fit the entire logo inside the boundaries without cropping text/graphics
-            const scale = Math.min(size / img.width, size / img.height);
-            const w = img.width * scale;
-            const h = img.height * scale;
-            const x = (size - w) / 2;
-            const y = (size - h) / 2;
+            const drawWidth = currentWidth * scaleFactor;
+            const drawHeight = currentHeight * scaleFactor;
+            const drawX = (size - drawWidth) / 2 + offset.x * scaleFactor;
+            const drawY = (size - drawHeight) / 2 + offset.y * scaleFactor;
             
-            pngCtx.drawImage(img, x, y, w, h);
+            // Clear to transparency
+            pngCtx.clearRect(0, 0, size, size);
+            pngCtx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
             results[key] = pngCanvas.toDataURL("image/png");
             
             // WebP supporting transparency
@@ -220,13 +315,12 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
               jpgCtx.fillStyle = "#FFFFFF";
               jpgCtx.fillRect(0, 0, size, size);
               
-              const scale = Math.min(size / img.width, size / img.height);
-              const w = img.width * scale;
-              const h = img.height * scale;
-              const x = (size - w) / 2;
-              const y = (size - h) / 2;
+              const drawWidth = currentWidth * scaleFactor;
+              const drawHeight = currentHeight * scaleFactor;
+              const drawX = (size - drawWidth) / 2 + offset.x * scaleFactor;
+              const drawY = (size - drawHeight) / 2 + offset.y * scaleFactor;
               
-              jpgCtx.drawImage(img, x, y, w, h);
+              jpgCtx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
               results[`${key}Jpg`] = jpgCanvas.toDataURL("image/jpeg", 0.9);
             }
           }
@@ -252,7 +346,7 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
     if (!selectedLogoFile) return;
     setProcessingLogo(true);
     try {
-      const sizes = await processImageToSizes(selectedLogoFile);
+      const sizes = await processImageToSizes(selectedLogoFile, cropZoom, cropOffset);
       
       const response = await fetch("/api/save-logo", {
         method: "POST",
@@ -2117,60 +2211,146 @@ VALUES (
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  {/* Left Column: File Upload Area */}
+                  {/* Left Column: Interactive Brand Logo Workspace */}
                   <div className="space-y-4">
                     <label className="block text-xs font-mono text-indigo-600 uppercase tracking-wider font-bold">
-                      Upload Brand Logo (PNG or JPEG)
+                      Brand Logo Workspace (PNG or JPEG)
                     </label>
-                    <div 
-                      className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all flex flex-col items-center justify-center space-y-3 cursor-pointer ${
-                        selectedLogoFile 
-                          ? "border-indigo-500 bg-indigo-50/10" 
-                          : "border-slate-200 hover:border-indigo-400 bg-slate-50/30"
-                      }`}
-                      onClick={() => document.getElementById("brand-logo-file-input")?.click()}
-                    >
-                      <input 
-                        type="file" 
-                        id="brand-logo-file-input"
-                        accept="image/png, image/jpeg, image/jpg"
-                        className="hidden"
-                        onChange={handleLogoFileChange}
-                      />
-                      {logoPreviewUrl ? (
-                        <div className="relative group">
-                          <img 
-                            src={logoPreviewUrl} 
-                            alt="Logo preview" 
-                            className="h-28 w-28 object-contain rounded-xl shadow-md border border-slate-100 bg-white" 
-                          />
-                          <div className="absolute inset-0 bg-black/40 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <span className="text-[10px] text-white font-bold uppercase tracking-wider">Change Image</span>
-                          </div>
-                        </div>
-                      ) : (
+
+                    {!selectedLogoFile ? (
+                      <div 
+                        className="border-2 border-dashed rounded-2xl p-8 text-center transition-all flex flex-col items-center justify-center space-y-3 cursor-pointer border-slate-200 hover:border-indigo-400 bg-slate-50/30"
+                        onClick={() => document.getElementById("brand-logo-file-input")?.click()}
+                      >
+                        <input 
+                          type="file" 
+                          id="brand-logo-file-input"
+                          accept="image/png, image/jpeg, image/jpg"
+                          className="hidden"
+                          onChange={handleLogoFileChange}
+                        />
                         <div className="space-y-2">
-                          <Download className="w-8 h-8 text-slate-400 mx-auto" />
+                          <Download className="w-8 h-8 text-slate-400 mx-auto animate-bounce" />
                           <div>
                             <span className="text-xs font-bold text-indigo-600 block">Drag and drop or click to browse</span>
                             <span className="text-[10px] text-slate-400 block mt-0.5">Supports high-res JPEG, JPG, PNG files</span>
                           </div>
                         </div>
-                      )}
-                    </div>
-
-                    {selectedLogoFile && (
-                      <div className="flex items-center justify-between bg-slate-50 border border-slate-100 px-4 py-2.5 rounded-xl text-xs">
-                        <div className="truncate font-semibold text-slate-700 max-w-[200px] sm:max-w-[300px]">
-                          {selectedLogoFile.name} ({(selectedLogoFile.size / 1024).toFixed(1)} KB)
+                      </div>
+                    ) : (
+                      <div className="bg-slate-50/50 border border-slate-200 rounded-2xl p-5 space-y-4 flex flex-col items-center">
+                        <div className="text-center w-full pb-2 border-b border-slate-150 flex items-center justify-between text-xs text-slate-500 font-semibold">
+                          <span>Interactive Cropper Tool</span>
+                          <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-mono font-bold">1:1 Square</span>
                         </div>
-                        <button 
-                          type="button" 
-                          onClick={() => { setSelectedLogoFile(null); setLogoPreviewUrl(null); }}
-                          className="text-red-500 hover:text-red-700 font-bold uppercase text-[10px]"
+
+                        {/* Draggable Viewport Container */}
+                        <div 
+                          className="relative w-[240px] h-[240px] bg-slate-200 rounded-xl overflow-hidden border border-slate-300 shadow-inner select-none cursor-move flex items-center justify-center"
+                          onMouseDown={handleLogoMouseDown}
+                          onMouseMove={handleLogoMouseMove}
+                          onMouseUp={handleLogoMouseUp}
+                          onMouseLeave={handleLogoMouseUp}
+                          onTouchStart={handleLogoTouchStart}
+                          onTouchMove={handleLogoTouchMove}
+                          onTouchEnd={handleLogoMouseUp}
                         >
-                          Clear
-                        </button>
+                          {logoPreviewUrl && (
+                            <img
+                              src={logoPreviewUrl}
+                              alt="Crop source"
+                              onLoad={handleCropperImageLoad}
+                              draggable={false}
+                              style={getCropperImageStyle()}
+                            />
+                          )}
+                          
+                          {/* Dark Outer Mask Ring to help visualize the Crop Boundary */}
+                          <div className="absolute inset-0 border-[20px] border-black/35 rounded-xl pointer-events-none" />
+                          
+                          {/* Dashed Crop Square Selection Boundary */}
+                          <div className="absolute inset-5 border-2 border-dashed border-white/90 rounded-lg pointer-events-none shadow-[0_0_0_999px_rgba(0,0,0,0.15)]" />
+                          
+                          {/* Inner Alignment Gridlines */}
+                          <div className="absolute inset-5 pointer-events-none">
+                            <div className="absolute inset-x-0 top-1/3 border-t border-white/30" />
+                            <div className="absolute inset-x-0 top-2/3 border-t border-white/30" />
+                            <div className="absolute inset-y-0 left-1/3 border-l border-white/30" />
+                            <div className="absolute inset-y-0 left-2/3 border-l border-white/30" />
+                          </div>
+                        </div>
+
+                        <div className="text-[10px] text-slate-500 text-center leading-normal">
+                          💡 <span className="font-bold">Drag and pan</span> the logo inside the frame. Use the slider below to zoom.
+                        </div>
+
+                        {/* Zoom Level Control Slider */}
+                        <div className="space-y-1.5 w-full">
+                          <div className="flex items-center justify-between text-xs text-slate-500">
+                            <span className="font-mono uppercase tracking-wider text-[10px] font-bold">Zoom Scale</span>
+                            <span className="font-bold font-mono text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{cropZoom.toFixed(2)}x</span>
+                          </div>
+                          <input 
+                            type="range"
+                            min="1.0"
+                            max="4.0"
+                            step="0.05"
+                            value={cropZoom}
+                            onChange={(e) => setCropZoom(parseFloat(e.target.value))}
+                            className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 focus:outline-none"
+                          />
+                        </div>
+
+                        {/* Preset Crop Boundaries Shortcuts */}
+                        <div className="flex w-full gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => { setCropZoom(1.0); setCropOffset({ x: 0, y: 0 }); }}
+                            className="flex-1 text-[10px] font-bold uppercase tracking-wider bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg py-1.5 px-2 transition-all cursor-pointer shadow-sm text-center"
+                          >
+                            Fit Logo
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (imgDims) {
+                                const VP_SIZE = 240;
+                                const containScale = Math.min(VP_SIZE / imgDims.width, VP_SIZE / imgDims.height);
+                                const coverScale = Math.max(VP_SIZE / imgDims.width, VP_SIZE / imgDims.height);
+                                const ratio = coverScale / containScale;
+                                setCropZoom(Math.max(1.0, ratio));
+                                setCropOffset({ x: 0, y: 0 });
+                              }
+                            }}
+                            className="flex-1 text-[10px] font-bold uppercase tracking-wider bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg py-1.5 px-2 transition-all cursor-pointer shadow-sm text-center"
+                          >
+                            Fill Area
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCropOffset({ x: 0, y: 0 })}
+                            className="flex-1 text-[10px] font-bold uppercase tracking-wider bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg py-1.5 px-2 transition-all cursor-pointer shadow-sm text-center"
+                          >
+                            Recenter
+                          </button>
+                        </div>
+
+                        {/* Loaded Image metadata details block */}
+                        <div className="flex items-center justify-between bg-white border border-slate-100 px-3 py-2 rounded-xl text-[10px] w-full text-slate-500">
+                          <div className="truncate font-semibold text-slate-700 max-w-[150px]">
+                            {selectedLogoFile.name}
+                          </div>
+                          <div className="font-mono">
+                            {imgDims ? `${imgDims.width}×${imgDims.height} px` : "loading..."} • {(selectedLogoFile.size / 1024).toFixed(1)} KB
+                          </div>
+                          <button 
+                            type="button" 
+                            onClick={() => { setSelectedLogoFile(null); setLogoPreviewUrl(null); setImgDims(null); }}
+                            className="text-red-500 hover:text-red-700 font-bold uppercase tracking-wider text-[9px] cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -2188,12 +2368,12 @@ VALUES (
                         {processingLogo ? (
                           <>
                             <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            <span>Deploying Brand...</span>
+                            <span>Deploying Brand Assets...</span>
                           </>
                         ) : (
                           <>
                             <Check className="w-3.5 h-3.5" />
-                            <span>Optimize & Deploy Logo</span>
+                            <span>Crop & Deploy Brand Logo</span>
                           </>
                         )}
                       </button>
@@ -2205,7 +2385,7 @@ VALUES (
                           onClick={handleDeleteCustomLogo}
                           className="px-4 py-2.5 border border-red-100 hover:border-red-200 text-red-600 hover:bg-red-50/50 rounded-full text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
                         >
-                          Reset to Default Brand
+                          Reset to Default
                         </button>
                       )}
                     </div>
