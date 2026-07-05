@@ -11,8 +11,23 @@ import { REVIEWS } from "./src/data";
 const app = express();
 const PORT = 3000;
 
-app.use(express.json({ limit: "15mb" }));
-app.use(express.urlencoded({ limit: "15mb", extended: true }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+// Error handling middleware to ensure any parsing, body size limits or payload errors return strictly valid JSON instead of HTML
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err) {
+    console.error("Express body-parsing / payload error intercepted:", err);
+    const status = err.status || err.statusCode || 500;
+    res.status(status).json({
+      error: err.message || "An error occurred processing the request payload",
+      code: err.code || "PAYLOAD_ERROR",
+      success: false
+    });
+    return;
+  }
+  next();
+});
 
 // Interceptor for brand asset images to serve dynamically from DB/Cache
 app.get("/assets/:filename", async (req, res, next) => {
@@ -46,11 +61,12 @@ app.get("/assets/:filename", async (req, res, next) => {
         
         if (base64Data) {
           let buffer: Buffer;
-          if (base64Data.startsWith("data:")) {
+          if (base64Data.startsWith("data:") && base64Data.includes(";base64,")) {
             const parts = base64Data.split(";base64,");
-            buffer = Buffer.from(parts[1], "base64");
+            const rawBase64 = parts[1] ? parts[1].trim() : "";
+            buffer = Buffer.from(rawBase64, "base64");
           } else {
-            buffer = Buffer.from(base64Data, contentType === "image/svg+xml" ? "utf-8" : "base64");
+            buffer = Buffer.from(base64Data.trim(), contentType === "image/svg+xml" ? "utf-8" : "base64");
           }
           res.setHeader("Content-Type", contentType);
           res.setHeader("Cache-Control", "public, max-age=31536000");
