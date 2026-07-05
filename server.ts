@@ -902,6 +902,27 @@ async function processAndResizeBase64(
   mimeType: string
 ): Promise<string | null> {
   if (!base64Data) return null;
+  
+  // High-performance optimization: the browser's hardware-accelerated Canvas has already 
+  // cropped, scaled, and exported the image exactly to the target sizes (512x512, 180x180, etc.)
+  // and formats. Reading/resizing it server-side using pure JS Jimp is highly redundant and 
+  // causes severe CPU bottlenecks, memory spikes, and eventual 500 errors or timeouts on serverless hosting.
+  // We check if the incoming base64 is already a valid data URL matching the expected mimeType,
+  // and if so, safely return it directly.
+  if (base64Data.startsWith(`data:${mimeType};base64,`)) {
+    return base64Data;
+  }
+  
+  // If it's a general base64 data URL of another image type, return it as-is to preserve dimensions
+  if (base64Data.startsWith("data:") && base64Data.includes(";base64,")) {
+    return base64Data;
+  }
+
+  // If it's a raw non-URI base64 string, wrap it properly and return it
+  if (!base64Data.startsWith("data:")) {
+    return `data:${mimeType};base64,` + base64Data.trim();
+  }
+
   try {
     let buffer: Buffer;
     if (base64Data.startsWith("data:") && base64Data.includes(";base64,")) {
