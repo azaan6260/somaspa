@@ -14,7 +14,7 @@ export const SERVICES: Service[] = [
       "Relaxes tight muscles",
       "Promotes deep, sound sleep"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1519699047748-de8e457a634e?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "swedish60",
@@ -29,7 +29,7 @@ export const SERVICES: Service[] = [
       "Eases superficial muscle tension",
       "Improves oxygen flow in blood"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1519699047748-de8e457a634e?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "deeptissue60",
@@ -44,7 +44,7 @@ export const SERVICES: Service[] = [
       "Improves blood flow to muscle tissues",
       "Aids in athletic recovery and posture"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "balinese60",
@@ -59,7 +59,7 @@ export const SERVICES: Service[] = [
       "Relieves joint and muscle stiffness",
       "Uplifts energy and mental clarity"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1617897903246-719242758050?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "aroma45",
@@ -74,7 +74,7 @@ export const SERVICES: Service[] = [
       "Aromatherapy benefits via inhalation and absorption",
       "Promotes absolute mental peace"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1617897903246-719242758050?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "thai45",
@@ -89,7 +89,7 @@ export const SERVICES: Service[] = [
       "Relieves tight joints and back tension",
       "Improves overall posture"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "hotstone90",
@@ -149,7 +149,7 @@ export const SERVICES: Service[] = [
       "Leaves skin silky, soft, and glowing",
       "Prepares skin to absorb moisturizing oils"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1617897903246-719242758050?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "bodypolishing60",
@@ -194,7 +194,7 @@ export const SERVICES: Service[] = [
       "Excellent high-value, budget-friendly wellness option",
       "Restores calm and energy to a busy mind"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1617897903246-719242758050?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "somaspa60",
@@ -209,7 +209,7 @@ export const SERVICES: Service[] = [
       "Balances inner flow and relieves anxiety",
       "Promotes absolute physical and mental harmony"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "abhyanga",
@@ -224,7 +224,7 @@ export const SERVICES: Service[] = [
       "Improves skin texture and physical stability",
       "Promotes deep, sound sleep"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1615397349754-cfa2066a298e?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "shirodhara",
@@ -239,7 +239,7 @@ export const SERVICES: Service[] = [
       "Deeply calms the central nervous system",
       "Enhances mental clarity, concentration, and focus"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1596178065887-1198b6148b2b?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "shiroabhyanga",
@@ -254,7 +254,7 @@ export const SERVICES: Service[] = [
       "Improves sleep quality and patterns",
       "Induces a high state of calm and clarity"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "padabhyanga",
@@ -284,7 +284,7 @@ export const SERVICES: Service[] = [
       "Improves local circulation and skin suppleness",
       "Nourishes dry skin layers deeply"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1512290923902-8a9f81dc236c?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1615397349754-cfa2066a298e?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "pizhichil",
@@ -299,7 +299,7 @@ export const SERVICES: Service[] = [
       "Deeply detoxifies and rejuvenates cells",
       "Combats persistent body fatigue and stiffness"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1615397349754-cfa2066a298e?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "elakizhi",
@@ -359,7 +359,7 @@ export const SERVICES: Service[] = [
       "Relieves sciatic nerve irritation and pain",
       "Increases mobility and strength of the lower back"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1615397349754-cfa2066a298e?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "greevabasti",
@@ -374,7 +374,7 @@ export const SERVICES: Service[] = [
       "Reduces tension headaches from long screen hours",
       "Lubricates and relaxes neck joints and ligaments"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1615397349754-cfa2066a298e?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "janubasti",

@@ -212,7 +212,7 @@ const DEFAULT_SERVICES = [
       "Relaxes tight muscles",
       "Promotes deep, sound sleep"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1519699047748-de8e457a634e?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "swedish60",
@@ -227,7 +227,7 @@ const DEFAULT_SERVICES = [
       "Eases superficial muscle tension",
       "Improves oxygen flow in blood"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1519699047748-de8e457a634e?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "deeptissue60",
@@ -242,7 +242,7 @@ const DEFAULT_SERVICES = [
       "Improves blood flow to muscle tissues",
       "Aids in athletic recovery and posture"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "balinese60",
@@ -257,7 +257,7 @@ const DEFAULT_SERVICES = [
       "Relieves joint and muscle stiffness",
       "Uplifts energy and mental clarity"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1617897903246-719242758050?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "aroma45",
@@ -272,7 +272,7 @@ const DEFAULT_SERVICES = [
       "Aromatherapy benefits via inhalation and absorption",
       "Promotes absolute mental peace"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1617897903246-719242758050?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "thai45",
@@ -287,7 +287,7 @@ const DEFAULT_SERVICES = [
       "Relieves tight joints and back tension",
       "Improves overall posture"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "hotstone90",
@@ -347,7 +347,7 @@ const DEFAULT_SERVICES = [
       "Leaves skin silky, soft, and glowing",
       "Prepares skin to absorb moisturizing oils"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1617897903246-719242758050?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "bodypolishing60",
@@ -392,7 +392,7 @@ const DEFAULT_SERVICES = [
       "Excellent high-value, budget-friendly wellness option",
       "Restores calm and energy to a busy mind"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1617897903246-719242758050?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "somaspa60",
@@ -407,7 +407,7 @@ const DEFAULT_SERVICES = [
       "Balances inner flow and relieves anxiety",
       "Promotes absolute physical and mental harmony"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "abhyanga",
@@ -422,7 +422,7 @@ const DEFAULT_SERVICES = [
       "Improves skin texture and physical stability",
       "Promotes deep, sound sleep"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1615397349754-cfa2066a298e?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "shirodhara",
@@ -437,7 +437,7 @@ const DEFAULT_SERVICES = [
       "Deeply calms the central nervous system",
       "Enhances mental clarity, concentration, and focus"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1596178065887-1198b6148b2b?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "shiroabhyanga",
@@ -452,7 +452,7 @@ const DEFAULT_SERVICES = [
       "Improves sleep quality and patterns",
       "Induces a high state of calm and clarity"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "padabhyanga",
@@ -482,7 +482,7 @@ const DEFAULT_SERVICES = [
       "Improves local circulation and skin suppleness",
       "Nourishes dry skin layers deeply"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1512290923902-8a9f81dc236c?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1615397349754-cfa2066a298e?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "pizhichil",
@@ -497,7 +497,7 @@ const DEFAULT_SERVICES = [
       "Deeply detoxifies and rejuvenates cells",
       "Combats persistent body fatigue and stiffness"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1615397349754-cfa2066a298e?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "elakizhi",
@@ -557,7 +557,7 @@ const DEFAULT_SERVICES = [
       "Relieves sciatic nerve irritation and pain",
       "Increases mobility and strength of the lower back"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1615397349754-cfa2066a298e?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "greevabasti",
@@ -572,7 +572,7 @@ const DEFAULT_SERVICES = [
       "Reduces tension headaches from long screen hours",
       "Lubricates and relaxes neck joints and ligaments"
     ],
-    imageUrl: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&q=80&w=800"
+    imageUrl: "https://images.unsplash.com/photo-1615397349754-cfa2066a298e?auto=format&fit=crop&q=80&w=800"
   },
   {
     id: "janubasti",
@@ -702,6 +702,22 @@ function saveDB(data: any) {
 
 // Ensure database is populated immediately
 let db = loadDB();
+
+// Migration: auto-update saved services with latest DEFAULT_SERVICES images
+if (db && Array.isArray(db.services)) {
+  let updated = false;
+  db.services = db.services.map((s: any) => {
+    const matched = DEFAULT_SERVICES.find(ds => ds.id === s.id);
+    if (matched && matched.imageUrl !== s.imageUrl) {
+      updated = true;
+      return { ...s, imageUrl: matched.imageUrl };
+    }
+    return s;
+  });
+  if (updated) {
+    saveDB(db);
+  }
+}
 
 // API ROUTES
 
