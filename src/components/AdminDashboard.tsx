@@ -25,7 +25,8 @@ import {
   Download,
   Ticket,
   Star,
-  MessageSquare
+  MessageSquare,
+  LogOut
 } from "lucide-react";
 import { Employee, Service, Booking, SpaMetadata, OperatingHour, Bill, BillItem, Review } from "../types";
 
@@ -36,9 +37,30 @@ interface AdminDashboardProps {
 
 export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashboardProps) {
   // Authentication gate
-  const [pin, setPin] = useState("");
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    try {
+      const stored = localStorage.getItem("soma_admin_session");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return !!parsed.isAuthenticated;
+      }
+    } catch (_) {}
+    return false;
+  });
+  const [adminUser, setAdminUser] = useState<{ email: string; name: string } | null>(() => {
+    try {
+      const stored = localStorage.getItem("soma_admin_session");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return parsed.user || null;
+      }
+    } catch (_) {}
+    return null;
+  });
   const [authError, setAuthError] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // DB State
   const [dbState, setDbState] = useState<{
@@ -507,15 +529,46 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
   };
 
   // Auth Submit
-  const handleAuthSubmit = (e: React.FormEvent) => {
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Default master pin is 1234
-    if (pin === "1234" || pin === "1994") {
-      setIsAuthenticated(true);
-      setAuthError("");
-    } else {
-      setAuthError("Invalid Admin PIN. Please check your credentials.");
+    setAuthError("");
+    setIsLoggingIn(true);
+
+    try {
+      const response = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setIsAuthenticated(true);
+        setAdminUser(data.user);
+        localStorage.setItem("soma_admin_session", JSON.stringify({
+          isAuthenticated: true,
+          user: data.user
+        }));
+        setAuthError("");
+      } else {
+        setAuthError(data.error || "Authentication failed. Invalid email or password.");
+      }
+    } catch (err) {
+      console.error("Login request error:", err);
+      setAuthError("Network error. Please check your connection and try again.");
+    } finally {
+      setIsLoggingIn(false);
     }
+  };
+
+  // Logout handler
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setAdminUser(null);
+    setEmail("");
+    setPassword("");
+    localStorage.removeItem("soma_admin_session");
   };
 
   // Reset database state to defaults
@@ -1119,27 +1172,41 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
         <div className="space-y-2">
           <h2 className="font-serif text-2xl font-bold text-slate-900">SOMA Backoffice Gate</h2>
           <p className="text-sm text-slate-500">
-            Please enter your administrative PIN to access attendance logs, salon menu prices, contact details, and payroll metrics.
+            Please enter your administrative email and password to access attendance logs, salon menu prices, contact details, and payroll metrics.
           </p>
         </div>
 
-        <form onSubmit={handleAuthSubmit} className="space-y-4">
+        <form onSubmit={handleAuthSubmit} className="space-y-4 text-left">
           <div>
-            <label className="block text-left text-xs font-mono text-indigo-600 uppercase tracking-wider mb-2 font-bold">
-              Administrative PIN Code
+            <label className="block text-xs font-mono text-indigo-600 uppercase tracking-wider mb-2 font-bold">
+              Admin Email Address
+            </label>
+            <input 
+              type="email" 
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="admin@somaspa.com" 
+              className="w-full bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-xl px-4 py-3 text-sm font-medium text-slate-900 placeholder-slate-400 animate-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-mono text-indigo-600 uppercase tracking-wider mb-2 font-bold">
+              Security Password
             </label>
             <input 
               type="password" 
               required
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              placeholder="••••" 
-              className="w-full text-center tracking-[0.5em] bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-xl px-4 py-3 text-lg font-bold"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••" 
+              className="w-full bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-xl px-4 py-3 text-sm font-medium text-slate-900 placeholder-slate-400 animate-none"
             />
           </div>
 
           {authError && (
-            <div className="text-xs text-red-600 font-semibold flex items-center justify-center space-x-1">
+            <div className="text-xs text-red-600 font-semibold flex items-center justify-center space-x-1 py-1">
               <AlertCircle className="w-3.5 h-3.5" />
               <span>{authError}</span>
             </div>
@@ -1147,15 +1214,30 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
 
           <button
             type="submit"
-            className="w-full bg-gradient-to-r from-indigo-600 to-sky-500 text-white font-bold py-3 rounded-xl transition-all hover:opacity-90 active:scale-[0.98] text-sm uppercase tracking-wider cursor-pointer"
+            disabled={isLoggingIn}
+            className="w-full bg-gradient-to-r from-indigo-600 to-sky-500 text-white font-bold py-3 rounded-xl transition-all hover:opacity-90 active:scale-[0.98] text-sm uppercase tracking-wider cursor-pointer flex items-center justify-center space-x-2 disabled:opacity-50"
           >
-            Authenticate Portal
+            {isLoggingIn ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>Authenticating...</span>
+              </>
+            ) : (
+              <span>Authenticate Portal</span>
+            )}
           </button>
         </form>
 
-        <p className="text-[10px] text-slate-400 font-mono">
-          Demo Access PIN: <strong className="text-indigo-600">1234</strong>
-        </p>
+        <div className="p-4 bg-slate-50 rounded-2xl text-left space-y-1.5 border border-slate-100">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wider font-mono font-bold">
+            Administrative Demo Accounts:
+          </p>
+          <div className="text-xs text-slate-600 font-mono space-y-0.5">
+            <div>Email: <strong className="text-indigo-600 select-all">admin@somaspa.com</strong></div>
+            <div>Email: <strong className="text-indigo-600 select-all">azaan007@gmail.com</strong></div>
+            <div>Password: <strong className="text-indigo-600 select-all">admin123</strong></div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -1165,13 +1247,18 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
       {/* Header Banner */}
       <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 relative overflow-hidden shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div className="space-y-2 relative z-10">
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="bg-indigo-500/20 text-indigo-300 text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 rounded-full font-bold border border-indigo-500/30">
               Admin Backoffice
             </span>
             <span className="bg-green-500/20 text-green-300 text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 rounded-full font-bold border border-green-500/30">
               Live DB Synced
             </span>
+            {adminUser && (
+              <span className="bg-slate-800 text-slate-300 text-[10px] font-mono px-2.5 py-1 rounded-full border border-slate-700 font-medium">
+                User: {adminUser.email}
+              </span>
+            )}
           </div>
           <h1 className="font-serif text-3xl font-semibold tracking-tight">
             {dbState?.metadata.title || "Soma Spa"} Management Portal
@@ -1196,6 +1283,14 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
           >
             <AlertCircle className="w-3.5 h-3.5" />
             <span>Reset Demo DB</span>
+          </button>
+
+          <button 
+            onClick={handleLogout}
+            className="bg-slate-800 hover:bg-slate-700 hover:text-red-400 text-slate-200 border border-slate-700 rounded-full px-4 py-2 text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Logout</span>
           </button>
         </div>
 

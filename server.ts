@@ -721,6 +721,44 @@ if (db && Array.isArray(db.services)) {
 
 // API ROUTES
 
+// Admin Auth endpoint
+app.post("/api/admin/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ success: false, error: "Email and password are required" });
+    }
+
+    const emailClean = email.trim().toLowerCase();
+    const pwdClean = password.trim();
+
+    // Standard pre-defined admins with custom fallback passwords
+    const defaultEmail = process.env.ADMIN_EMAIL || "admin@somaspa.com";
+    const defaultPassword = process.env.ADMIN_PASSWORD || "admin123";
+
+    const isMatch = (
+      (emailClean === defaultEmail && pwdClean === defaultPassword) ||
+      (emailClean === "azaan007@gmail.com" && pwdClean === "admin123") ||
+      (emailClean === "hello@somaspaindore.com" && pwdClean === "admin123")
+    );
+
+    if (isMatch) {
+      return res.json({
+        success: true,
+        user: {
+          email: emailClean,
+          name: emailClean === "azaan007@gmail.com" ? "Azaan" : "Soma Admin"
+        }
+      });
+    } else {
+      return res.status(401).json({ success: false, error: "Invalid email address or password" });
+    }
+  } catch (err: any) {
+    console.error("Admin login error:", err);
+    return res.status(500).json({ success: false, error: "Server authentication error" });
+  }
+});
+
 // Get entire database state (for admin sync)
 app.get("/api/db", async (req, res) => {
   try {
