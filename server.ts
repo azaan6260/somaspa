@@ -732,12 +732,25 @@ app.post("/api/admin/login", async (req, res) => {
     const emailClean = email.trim().toLowerCase();
     const pwdClean = password.trim();
 
-    // Standard pre-defined admins with custom fallback passwords
-    const defaultEmail = process.env.ADMIN_EMAIL || "admin@somaspa.com";
-    const defaultPassword = process.env.ADMIN_PASSWORD || "admin123";
+    // Standard pre-defined admins with custom fallback passwords, supporting VITE_ prefixes too
+    let defaultEmail = (process.env.ADMIN_EMAIL || process.env.VITE_ADMIN_EMAIL || "admin@somaspa.com").trim();
+    let defaultPassword = (process.env.ADMIN_PASSWORD || process.env.VITE_ADMIN_PASSWORD || "admin123").trim();
 
+    // Strip wrapping double or single quotes (often added accidentally in hosting control panels or env configs)
+    if ((defaultEmail.startsWith('"') && defaultEmail.endsWith('"')) || (defaultEmail.startsWith("'") && defaultEmail.endsWith("'"))) {
+      defaultEmail = defaultEmail.slice(1, -1).trim();
+    }
+    if ((defaultPassword.startsWith('"') && defaultPassword.endsWith('"')) || (defaultPassword.startsWith("'") && defaultPassword.endsWith("'"))) {
+      defaultPassword = defaultPassword.slice(1, -1).trim();
+    }
+
+    defaultEmail = defaultEmail.toLowerCase();
+
+    // Check match against environment-defined admin or predefined administrative emails
     const isMatch = (
       (emailClean === defaultEmail && pwdClean === defaultPassword) ||
+      (emailClean === "azaan007@gmail.com" && pwdClean === defaultPassword) ||
+      (emailClean === "hello@somaspaindore.com" && pwdClean === defaultPassword) ||
       (emailClean === "azaan007@gmail.com" && pwdClean === "admin123") ||
       (emailClean === "hello@somaspaindore.com" && pwdClean === "admin123")
     );

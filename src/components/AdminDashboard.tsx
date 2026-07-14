@@ -1186,7 +1186,7 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@somaspa.com" 
+              placeholder="Enter admin email" 
               className="w-full bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-xl px-4 py-3 text-sm font-medium text-slate-900 placeholder-slate-400 animate-none"
             />
           </div>
@@ -1200,7 +1200,7 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••" 
+              placeholder="Enter password" 
               className="w-full bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-xl px-4 py-3 text-sm font-medium text-slate-900 placeholder-slate-400 animate-none"
             />
           </div>
@@ -1227,17 +1227,6 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
             )}
           </button>
         </form>
-
-        <div className="p-4 bg-slate-50 rounded-2xl text-left space-y-1.5 border border-slate-100">
-          <p className="text-[10px] text-slate-500 uppercase tracking-wider font-mono font-bold">
-            Administrative Demo Accounts:
-          </p>
-          <div className="text-xs text-slate-600 font-mono space-y-0.5">
-            <div>Email: <strong className="text-indigo-600 select-all">admin@somaspa.com</strong></div>
-            <div>Email: <strong className="text-indigo-600 select-all">azaan007@gmail.com</strong></div>
-            <div>Password: <strong className="text-indigo-600 select-all">admin123</strong></div>
-          </div>
-        </div>
       </div>
     );
   }
