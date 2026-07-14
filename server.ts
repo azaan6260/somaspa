@@ -15,6 +15,13 @@ const PORT = 3000;
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
+// Set up local uploads directory for service images
+const uploadsDir = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+app.use("/uploads", express.static(uploadsDir));
+
 // Error handling middleware to ensure any parsing, body size limits or payload errors return strictly valid JSON instead of HTML
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (err) {
@@ -1869,6 +1876,37 @@ app.post("/api/employees/:id/salary", async (req, res) => {
     }
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to update salary payment" });
+  }
+});
+
+// Image Upload Service for Admin
+app.post("/api/upload", async (req, res) => {
+  try {
+    const { filename, fileData } = req.body;
+    if (!filename || !fileData) {
+      return res.status(400).json({ success: false, error: "Filename and fileData are required" });
+    }
+
+    // Parse base64 data URI (e.g. data:image/png;base64,...)
+    const matches = fileData.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      return res.status(400).json({ success: false, error: "Invalid base64 image data format" });
+    }
+
+    const fileBuffer = Buffer.from(matches[2], "base64");
+    const extension = filename.split(".").pop() || "png";
+    const cleanFilename = `service_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${extension}`;
+    const filePath = path.join(uploadsDir, cleanFilename);
+
+    fs.writeFileSync(filePath, fileBuffer);
+
+    res.json({
+      success: true,
+      imageUrl: `/uploads/${cleanFilename}`
+    });
+  } catch (err: any) {
+    console.error("Image upload handler error:", err);
+    res.status(500).json({ success: false, error: err.message || "Failed to save uploaded image" });
   }
 });
 

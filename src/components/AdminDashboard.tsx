@@ -26,7 +26,9 @@ import {
   Ticket,
   Star,
   MessageSquare,
-  LogOut
+  LogOut,
+  Upload,
+  Image
 } from "lucide-react";
 import { Employee, Service, Booking, SpaMetadata, OperatingHour, Bill, BillItem, Review } from "../types";
 
@@ -140,6 +142,11 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
   const [showServiceForm, setShowServiceForm] = useState(false);
   const [newBenefitText, setNewBenefitText] = useState("");
+
+  // Service image upload states
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [uploadImageError, setUploadImageError] = useState("");
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Settings metadata state
   const [settingsForm, setSettingsForm] = useState<SpaMetadata | null>(null);
@@ -802,6 +809,91 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
     }
   };
 
+  // Upload and process image files for services
+  const processAndUploadImage = async (file: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setUploadImageError("Please select or drop a valid image file (PNG, JPG, WebP).");
+      return;
+    }
+    // Limit to 10MB client-side
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadImageError("Image file size exceeds 10MB limit.");
+      return;
+    }
+
+    setIsUploadingImage(true);
+    setUploadImageError("");
+
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
+        const fileData = reader.result as string;
+        try {
+          const res = await fetch("/api/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              filename: file.name,
+              fileData
+            })
+          });
+
+          const data = await res.json();
+          if (res.ok && data.success) {
+            setServiceForm(prev => ({
+              ...prev,
+              imageUrl: data.imageUrl
+            }));
+            showFeedback("success", "Service image uploaded successfully!");
+          } else {
+            setUploadImageError(data.error || "Failed to upload image to server.");
+          }
+        } catch (uploadErr) {
+          console.error("Error sending file to server:", uploadErr);
+          setUploadImageError("Network error uploading image file.");
+        } finally {
+          setIsUploadingImage(false);
+        }
+      };
+      reader.onerror = () => {
+        setUploadImageError("Failed to read image file.");
+        setIsUploadingImage(false);
+      };
+    } catch (err: any) {
+      console.error("FileReader error:", err);
+      setUploadImageError(err.message || "Failed to process image file.");
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handleServiceImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files[0]) {
+      processAndUploadImage(files[0]);
+    }
+  };
+
+  const handleImageDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleImageDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleImageDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const files = e.dataTransfer.files;
+    if (files && files[0]) {
+      processAndUploadImage(files[0]);
+    }
+  };
+
   const handleAddBenefit = () => {
     if (!newBenefitText.trim()) return;
     setServiceForm({
@@ -1300,37 +1392,50 @@ export default function AdminDashboard({ onRefreshApp, logoPalette }: AdminDashb
       )}
 
       {/* Admin Tabs Navigation */}
-      <div className="border-b border-slate-200 flex flex-wrap gap-1 sm:gap-2">
-        {[
-          { id: "overview", label: "Overview Metrics", icon: LayoutDashboard },
-          { id: "employees", label: "Employees & Payroll", icon: Users },
-          { id: "services", label: "Spa Service Menu", icon: BookOpen },
-          { id: "settings", label: "Timing & Address", icon: MapPin },
-          { id: "leads", label: `Leads Inbox (${totalLeads})`, icon: Mail },
-          { id: "billing", label: "Billing & Invoices", icon: Receipt },
-          { id: "reviews", label: `Guest Reviews`, icon: Star }
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const isSelected = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => {
-                setActiveTab(tab.id as any);
-                setShowEmployeeForm(false);
-                setShowServiceForm(false);
-              }}
-              className={`flex items-center space-x-2 px-4 py-3 border-b-2 text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
-                isSelected 
-                  ? "border-indigo-600 text-indigo-600" 
-                  : "border-transparent text-slate-500 hover:text-indigo-600"
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
+      <div className="border-b border-slate-200 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="flex flex-wrap gap-1 sm:gap-2">
+          {[
+            { id: "overview", label: "Overview Metrics", icon: LayoutDashboard },
+            { id: "employees", label: "Employees & Payroll", icon: Users },
+            { id: "services", label: "Spa Service Menu", icon: BookOpen },
+            { id: "settings", label: "Timing & Address", icon: MapPin },
+            { id: "leads", label: `Leads Inbox (${totalLeads})`, icon: Mail },
+            { id: "billing", label: "Billing & Invoices", icon: Receipt },
+            { id: "reviews", label: `Guest Reviews`, icon: Star }
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isSelected = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  setActiveTab(tab.id as any);
+                  setShowEmployeeForm(false);
+                  setShowServiceForm(false);
+                }}
+                className={`flex items-center space-x-2 px-4 py-3 border-b-2 text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+                  isSelected 
+                    ? "border-indigo-600 text-indigo-600" 
+                    : "border-transparent text-slate-500 hover:text-indigo-600"
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="pb-2 md:pb-0 pr-2 flex justify-end">
+          <button 
+            onClick={handleLogout}
+            className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 text-xs font-bold transition-all border border-red-100 cursor-pointer shadow-sm hover:shadow active:scale-95"
+            title="Log Out of Admin Panel"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Log Out Admin</span>
+          </button>
+        </div>
       </div>
 
       {/* Loading state indicator */}
@@ -2144,26 +2249,97 @@ VALUES (
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-mono text-indigo-600 uppercase tracking-wider mb-1 font-bold">Service Duration</label>
-                      <input 
-                        type="text" 
-                        value={serviceForm.duration}
-                        onChange={(e) => setServiceForm({ ...serviceForm, duration: e.target.value })}
-                        placeholder="E.g., 60 / 90 Mins" 
-                        className="w-full bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-xl px-4 py-2.5 text-sm"
-                      />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-2">
+                    {/* Duration input */}
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-mono text-indigo-600 uppercase tracking-wider mb-1.5 font-bold">Service Duration</label>
+                        <input 
+                          type="text" 
+                          value={serviceForm.duration}
+                          onChange={(e) => setServiceForm({ ...serviceForm, duration: e.target.value })}
+                          placeholder="E.g., 60 / 90 Mins" 
+                          className="w-full bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-xl px-4 py-2.5 text-sm"
+                        />
+                      </div>
+
+                      {/* Manual Image URL Paste */}
+                      <div>
+                        <label className="block text-xs font-mono text-indigo-600 uppercase tracking-wider mb-1.5 font-bold">
+                          Direct Image URL (Alternative)
+                        </label>
+                        <input 
+                          type="text" 
+                          value={serviceForm.imageUrl}
+                          onChange={(e) => setServiceForm({ ...serviceForm, imageUrl: e.target.value })}
+                          placeholder="Or paste direct image URL (e.g. https://...)" 
+                          className="w-full bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-xl px-4 py-2.5 text-sm"
+                        />
+                      </div>
                     </div>
+
+                    {/* Image Upload Area */}
                     <div>
-                      <label className="block text-xs font-mono text-indigo-600 uppercase tracking-wider mb-1 font-bold">Service Banner Image URL</label>
-                      <input 
-                        type="text" 
-                        value={serviceForm.imageUrl}
-                        onChange={(e) => setServiceForm({ ...serviceForm, imageUrl: e.target.value })}
-                        placeholder="Image URL" 
-                        className="w-full bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-xl px-4 py-2.5 text-sm"
-                      />
+                      <label className="block text-xs font-mono text-indigo-600 uppercase tracking-wider mb-1.5 font-bold">
+                        Service Banner Image
+                      </label>
+                      <div 
+                        onDragOver={handleImageDragOver}
+                        onDragLeave={handleImageDragLeave}
+                        onDrop={handleImageDrop}
+                        className={`border-2 border-dashed rounded-2xl p-4 flex flex-col items-center justify-center text-center transition-all cursor-pointer relative min-h-[140px] ${
+                          isDragOver 
+                            ? "border-indigo-500 bg-indigo-50/50" 
+                            : "border-slate-200 hover:border-indigo-400 hover:bg-slate-50/50"
+                        }`}
+                        onClick={() => document.getElementById("service-image-file-input")?.click()}
+                      >
+                        <input 
+                          type="file" 
+                          id="service-image-file-input"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleServiceImageFileChange}
+                        />
+
+                        {isUploadingImage ? (
+                          <div className="space-y-2 py-4">
+                            <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
+                            <p className="text-xs text-slate-500 font-semibold">Processing & uploading image...</p>
+                          </div>
+                        ) : serviceForm.imageUrl ? (
+                          <div className="flex items-center space-x-4 w-full">
+                            <div className="relative w-24 h-16 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 flex-shrink-0">
+                              <img 
+                                src={serviceForm.imageUrl} 
+                                alt="Service preview" 
+                                className="w-full h-full object-cover"
+                                referrerPolicy="no-referrer"
+                              />
+                            </div>
+                            <div className="text-left flex-grow min-w-0">
+                              <p className="text-xs font-bold text-slate-800 truncate">Uploaded / Configured</p>
+                              <p className="text-[10px] text-slate-500 truncate select-all">{serviceForm.imageUrl}</p>
+                              <span className="inline-block mt-1 text-[9px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase font-mono">
+                                Click to replace
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5 py-2">
+                            <Upload className="w-6 h-6 text-slate-400 mx-auto" />
+                            <p className="text-xs font-bold text-slate-700">Drag & drop your service image here</p>
+                            <p className="text-[10px] text-slate-400">or click to browse local files (PNG, JPG, WebP)</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {uploadImageError && (
+                        <p className="text-xs text-red-600 font-bold mt-1.5 flex items-center space-x-1 justify-center bg-red-50 border border-red-100 p-2 rounded-xl">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          <span>{uploadImageError}</span>
+                        </p>
+                      )}
                     </div>
                   </div>
 

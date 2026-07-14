@@ -35,7 +35,20 @@ import {
 } from "lucide-react";
 
 export default function App() {
-  const [currentTab, setCurrentTab] = useState("home");
+  const [currentTab, setCurrentTab] = useState(() => {
+    try {
+      const path = window.location.pathname;
+      if (path === "/admin" || path === "/admin/") {
+        return "admin";
+      }
+      const pageMatch = path.substring(1);
+      const tabs = ["home", "services", "therapists", "consultant", "reviews", "portal"];
+      if (tabs.includes(pageMatch)) {
+        return pageMatch;
+      }
+    } catch (_) {}
+    return "home";
+  });
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [preselectedService, setPreselectedService] = useState<string>("");
@@ -145,6 +158,43 @@ export default function App() {
     fetchBookings();
     fetchLogoStatus();
     fetchBills();
+  }, []);
+
+  // Synchronize active tab with URL path
+  useEffect(() => {
+    try {
+      const currentPath = window.location.pathname;
+      const targetPath = currentTab === "home" ? "/" : `/${currentTab}`;
+      if (currentPath !== targetPath) {
+        window.history.pushState(null, "", targetPath);
+      }
+    } catch (err) {
+      console.error("Failed to pushState for tab:", err);
+    }
+  }, [currentTab]);
+
+  // Handle browser back / forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      try {
+        const path = window.location.pathname;
+        if (path === "/admin" || path === "/admin/") {
+          setCurrentTab("admin");
+        } else {
+          const pageMatch = path.substring(1) || "home";
+          const tabs = ["home", "services", "therapists", "consultant", "reviews", "portal"];
+          if (tabs.includes(pageMatch)) {
+            setCurrentTab(pageMatch);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to parse popstate:", err);
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
   }, []);
 
   useEffect(() => {
